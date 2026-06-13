@@ -1,0 +1,35 @@
+/* Global reset — ported from enrichment-app.html. The staff UI is otherwise styled
+   inline via STAFF_TOKENS (lib/tokens.ts), so there are no component stylesheets. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #f6f2eb;
+  font-family: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1a1814;
+  height: 100%;
+}
+
+#__next,
+body > div {
+  height: 100%;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: #1f5963 !important;
+  box-shadow: 0 0 0 3px rgba(31, 89, 99, 0.12);
+}
+
+/* Toast slide-up (ported from staff-app.jsx injected keyframes). */
+@keyframes slideUp {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

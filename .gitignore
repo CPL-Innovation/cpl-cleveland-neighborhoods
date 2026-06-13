@@ -1,3 +1,17 @@
 .DS_Store
 node_modules/
 *.log
+
+# Scan pipeline — local artifacts (never committed)
+.env
+.env.local
+masters/
+derivatives/
+data/scan/
+
+# Next.js
+.next/
+next-env.d.ts
+out/
+.vercel
+*.tsbuildinfo

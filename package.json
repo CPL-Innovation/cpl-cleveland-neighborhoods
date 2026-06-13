@@ -1,0 +1,36 @@
+{
+  "name": "cpl-cleveland-neighborhoods",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cleveland Neighborhoods archival map + library-facing enrichment interface.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "scan:run": "tsx scan/run.ts",
+    "scan:accuracy": "tsx scan/accuracy.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "drizzle-orm": "^0.33.0",
+    "next": "^14.2.13",
+    "postgres": "^3.4.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "drizzle-kit": "^0.24.2",
+    "tsx": "^4.22.4",
+    "typescript": "^5.6.2"
+  }
+}

@@ -120,6 +120,27 @@ function StaffSidebar({ activeSection, user }) {
           />
         ))}
 
+        {/* Ingest — new records entering the system, awaiting first-pass treatment. */}
+        <div style={{
+          padding: '14px 10px 6px',
+          fontFamily: t.mono, fontSize: 9.5,
+          letterSpacing: 1.4, textTransform: 'uppercase',
+          color: t.inkFaint,
+        }}>Ingest</div>
+        <SidebarItem
+          active={activeSection === 'ingest'}
+          glyph={<IngestGlyph />}
+          label="Scan pipeline"
+          hint="box-scan"
+          onClick={() => nav.navigate('scanPipeline')}
+        />
+        <SidebarItem
+          subtle
+          label="Sync inbox"
+          hint="ContentDM"
+          onClick={() => nav.toast('Sync inbox — existing ContentDM upstream path (not built in this MVP)', 'info')}
+        />
+
         <div style={{ flex: 1 }} />
 
         <div style={{
@@ -324,5 +345,6 @@ function PhotosGlyph()  { return <svg viewBox="0 0 14 14" fill="none"><rect x="2
 function StoriesGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M3 2.5 H10 a1 1 0 0 1 1 1 V11.5 L7 9.5 L3 11.5 Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>; }
 function ContribGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.5 4 L7 7 L11.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><rect x="2" y="3" width="10" height="8" rx="0.8" stroke="currentColor" strokeWidth="1.3"/></svg>; }
 function VocabGlyph()   { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.5 3 H11.5 M2.5 7 H11.5 M2.5 11 H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>; }
+function IngestGlyph()  { return <svg viewBox="0 0 14 14" fill="none"><path d="M7 2 V8 M4.5 5.5 L7 8 L9.5 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.5 9.5 V11.5 H11.5 V9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>; }
 
 Object.assign(window, { StaffShell, STAFF_TOKENS });

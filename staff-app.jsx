@@ -10,6 +10,9 @@ const VIEWS = {
   story:   { section: 'stories', title: '',               meta: 'DRAFT · CO-AUTHORED' },
   contrib: { section: 'contrib', title: 'Contributions',  meta: '8 PENDING · PATRON' },
   vocab:   { section: 'vocab',   title: 'Vocabularies',   meta: '6 LISTS' },
+  scanPipeline: { section: 'ingest', title: 'Scan pipeline',  meta: 'INGEST · BOX-SCAN' },
+  scanReview:   { section: 'ingest', title: 'Review & interpret', meta: 'INGEST · SCAN REVIEW' },
+  scanAccuracy: { section: 'ingest', title: 'Accuracy',       meta: 'INGEST · EVAL' },
 };
 
 // Sample records — drives both the photos sheet and the record edit screen.
@@ -31,7 +34,7 @@ const SAMPLE_RECORDS = [
 const NavContext = React.createContext(null);
 function useNav() {
   return React.useContext(NavContext) || {
-    view: 'home', recordId: null, savedView: null,
+    view: 'home', recordId: null, scanId: null, savedView: null,
     navigate: () => {}, toast: () => {},
     selection: new Set(), toggleSelect: () => {}, clearSelection: () => {},
     records: SAMPLE_RECORDS,
@@ -105,6 +108,7 @@ function StaffApp() {
   const [toasts, setToasts] = React.useState([]);
   const [records, setRecords] = React.useState(SAMPLE_RECORDS);
   const [recordId, setRecordId] = React.useState(SAMPLE_RECORDS[0].id);
+  const [scanId, setScanId] = React.useState(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -130,6 +134,7 @@ function StaffApp() {
   const navigate = React.useCallback((target, opts = {}) => {
     if (target === 'record' && opts.id) setRecordId(opts.id);
     if (target === 'photos' && opts.savedView) setSavedView(opts.savedView);
+    if ((target === 'scanReview' || target === 'scanPipeline') && opts.id) setScanId(opts.id);
     setView(target);
   }, []);
 
@@ -143,7 +148,7 @@ function StaffApp() {
 
   const clearSelection = React.useCallback(() => setSelection(new Set()), []);
 
-  const ctx = { view, recordId, savedView, selection, navigate, toast, toggleSelect, clearSelection, records };
+  const ctx = { view, recordId, scanId, savedView, selection, navigate, toast, toggleSelect, clearSelection, records };
   const viewMeta = VIEWS[view] || VIEWS.home;
   const currentRec = records.find(r => r.id === recordId) || records[0];
 
@@ -174,6 +179,9 @@ function StaffApp() {
         {view === 'story' && <StaffStoryAuthor />}
         {view === 'contrib' && <StubView title="Contributions queue" body="Patron-suggested fixes land here. Triage UI not built in this MVP." />}
         {view === 'vocab' && <StubView title="Vocabularies" body="Controlled lists for neighborhoods, themes, places. Not built in this MVP." />}
+        {view === 'scanPipeline' && <ScanPipeline />}
+        {view === 'scanReview' && <ScanReview />}
+        {view === 'scanAccuracy' && <ScanAccuracy />}
       </StaffShell>
       <Toaster toasts={toasts} />
     </NavContext.Provider>
