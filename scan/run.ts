@@ -16,30 +16,30 @@ import { vlmExtract, hasLiveKey, MODEL } from "@/lib/vlm-extract";
 const { values: ARGV } = parseArgs({
   options: {
     in: { type: "string", default: "masters" },
-    out: { type: "string", default: "derivatives" },
     only: { type: "string" },
     force: { type: "boolean", default: false },
   },
 });
 
 const IN_DIR = resolve(REPO_ROOT, ARGV.in as string);
-const OUT_DIR = resolve(REPO_ROOT, ARGV.out as string);
 
 async function processOne(m: { file: string; chcId: string; path: string }) {
   const masterRel = `${ARGV.in}/${m.file}`;
-  const localJpeg = resolve(OUT_DIR, `${m.chcId}.jpg`);
-  const jpegRel = `${ARGV.out}/${m.chcId}.jpg`;
+  // Web-relative path to the derived JPEG (bookkeeping + the review UI's <img> fallback).
+  // The actual file is written once, by the storage layer (public/derivatives/ locally,
+  // or Supabase Storage when deployed) — no separate top-level copy.
+  const jpegRel = `derivatives/${m.chcId}.jpg`;
 
   const existing = await getRecord(m.chcId);
   if (!ARGV.force && existing?.status === "ready") {
     return { chcId: m.chcId, ok: true, skipped: true };
   }
 
-  // 1. Derive (sharp) → bytes + local copy.
+  // 1. Derive (sharp) → JPEG bytes.
   let jpeg: Buffer;
   let derive;
   try {
-    ({ jpeg, meta: derive } = await deriveOne(m.path, localJpeg));
+    ({ jpeg, meta: derive } = await deriveOne(m.path));
   } catch (err) {
     await upsert(m.chcId, {
       master_path: masterRel,
@@ -99,8 +99,15 @@ async function main() {
     process.exit(1);
   }
 
+  const storageBackend =
+    process.env.STORAGE_BACKEND === "supabase" ||
+    (process.env.STORAGE_BACKEND !== "local" &&
+      process.env.SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY)
+      ? "Supabase"
+      : "local disk";
   console.log(
-    `Pipeline: ${masters.length} photo(s) · model=${MODEL} · ${hasLiveKey() ? "LIVE" : "STUB (no GEMINI_API_KEY)"} → Supabase`
+    `Pipeline: ${masters.length} photo(s) · model=${MODEL} · ${hasLiveKey() ? "LIVE" : "STUB (no GEMINI_API_KEY)"} → ${storageBackend}`
   );
 
   const results = [];

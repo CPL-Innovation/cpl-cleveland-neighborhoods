@@ -14,17 +14,18 @@ that review.
 
 ## Status (read this first)
 
-- **Staff + scan surfaces: migrated** to Next.js 14 (App Router) + TypeScript + Supabase. Live at `/staff`.
+- **Staff + scan surfaces: migrated** to Next.js 14 (App Router) + TypeScript. Live at `/staff`.
 - **Patron site (Leaflet map, landing): NOT migrated** — still the static prototype (`index.html` + root `*.jsx` via CDN React/Babel). A later pass.
 - **Superseded but still on disk** (inert, cleanup pending): root `*.jsx`, `enrichment-app.html`, `scan/server.mjs`, `scan/store.mjs`, the old `scan/*.mjs`. The Next tree does not import them.
-- **DB round-trip not yet verified end-to-end** — needs Supabase creds in `.env.local` (see Setup). `npm run build` (full typecheck) and the `/staff` dev render both pass.
+- **Local-by-default in dev:** the DB is **local Postgres** (Postgres.app) and derived JPEGs live on **local disk** (`public/derivatives/`, served at `/derivatives/<chc>.jpg`). Both swap to Supabase (Postgres + Storage) by env vars alone — no code change. Supabase is the deploy target, not a dev dependency.
+- **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
 - **Auth: deferred** (clean seam left).
 
 ## Stack
 
 - Next.js 14 App Router · React 18 · TypeScript (strict) · Node 22
-- Drizzle ORM + `postgres` driver → **Supabase Postgres**
-- Supabase **Storage** for derived JPEGs
+- Drizzle ORM + `postgres` driver → **Postgres** (local in dev · Supabase when deployed; switched by `DATABASE_URL`)
+- Derived JPEG store: **local disk** (`public/derivatives/`) in dev · **Supabase Storage** when deployed — pluggable in `lib/storage.ts`
 - `sharp` for TIFF→JPEG derivation (**local CLI only**, never serverless)
 - Gemini (`gemini-3-flash-preview`) for the VLM read, behind `lib/vlm-extract.ts`
 
@@ -32,14 +33,25 @@ that review.
 
 ```bash
 npm install
-cp .env.local.example .env.local     # fill DATABASE_URL (Supabase pooled/6543), SUPABASE_URL,
-                                      # SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY
-npm run db:push                       # create scan_review + photo_enrichment tables
-npm run scan:run                      # derive masters/ → upload JPEGs → VLM → rows
-npm run dev                           # → http://localhost:3000/staff
+
+# ── Local dev (default): local Postgres + on-disk JPEG store ──
+brew install --cask postgres-app    # then launch Postgres.app once (starts a server on :5432)
+createdb cpl_neighborhoods          # one-time
+cp .env.local.example .env.local    # set DATABASE_URL=postgresql://<you>@localhost:5432/cpl_neighborhoods
+                                    # (leave SUPABASE_* unset → storage backend = local disk)
+npm run db:migrate                  # apply drizzle/migrations → scan_review + photo_enrichment
+npm run scan:run                    # derive masters/ → public/derivatives/ → VLM → rows
+npm run dev                         # → http://localhost:3000/staff
+
+# ── Deploy (Supabase): same code, env-only ──
+# In .env.local set DATABASE_URL to the Supabase pooled string (port 6543),
+# plus SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY → storage backend auto-switches to Supabase.
 ```
 
-`.env.local`, `.env`, `masters/`, `derivatives/`, `data/scan/`, `node_modules/` are gitignored.
+> `db:push` uses an interactive TUI prompt (reads `/dev/tty`) — prefer `db:migrate` in
+> non-interactive/CLI contexts. Force a storage backend explicitly with `STORAGE_BACKEND=local|supabase`.
+
+`.env.local`, `.env`, `masters/`, `derivatives/`, `public/derivatives/`, `data/scan/`, `node_modules/` are gitignored.
 The scan CLI + drizzle-kit load env via `scan/env.mjs`; Next loads `.env.local` itself.
 
 ## Commands
@@ -49,7 +61,7 @@ The scan CLI + drizzle-kit load env via `scan/env.mjs`; Next loads `.env.local` 
 | `npm run dev` | Next dev server (`/staff` is the app) |
 | `npm run build` | Production build + **full TypeScript typecheck** (the gate) |
 | `npm run db:generate` / `db:migrate` / `db:push` | Drizzle migrations / push schema |
-| `npm run scan:run [-- --only CHC123] [-- --force]` | Local batch: derive → Storage → VLM → DB |
+| `npm run scan:run [-- --only CHC123] [-- --force]` | Local batch: derive → JPEG store → VLM → DB |
 | `npm run scan:accuracy` | Print the accuracy rollup + write `data/scan/accuracy.csv` |
 
 ## Layout
@@ -72,7 +84,8 @@ harvest/                  → ContentDM harvest pipeline (Tier 1→2→3, unchan
 data/ , public/data/      → harvested ContentDM JSON (read-only; patron + staff read this)
 technical/                → design LOGS (the why; append-only journal)
 docs/                     → reference docs (current truth — this file's siblings)
-masters/ , derivatives/   → local box-scan TIFFs + derived JPEGs (gitignored)
+masters/                  → local box-scan TIFFs (gitignored)
+public/derivatives/       → derived JPEGs, local storage backend (gitignored; served at /derivatives/*)
 ```
 
 ## Conventions
@@ -82,13 +95,14 @@ masters/ , derivatives/   → local box-scan TIFFs + derived JPEGs (gitignored)
 - **Staff app is a client SPA** at `/staff` — navigation is React state via `NavContext`/`useNav` (`components/staff/nav.tsx`), **not** file-based routes. (Adopting file routing/RSC is a possible later refactor.)
 - **Shared UI primitives** (`pillBtn`, `Kbd`, `Field`, `FieldGroup`, `FieldFoot`, `inputStyle`, `textareaStyle`, `selectStyle`, `ChipInput`) live in `components/staff/ui.tsx` — import, don't redefine.
 - **`scanApi`** (client fetch wrapper) lives in `lib/scan-api.ts`; the old `window`-global pattern is retired.
-- **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Per-photo serverless `retry` only re-runs the VLM against the JPEG already in Storage.
+- **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Per-photo serverless `retry` only re-runs the VLM against the JPEG already in the store. The store writes the JPEG **once** — `scan/run.ts` no longer keeps a separate top-level `derivatives/` copy; `lib/storage.ts` owns the file (local disk or Supabase).
 - **One source of truth per fact**: DB shape = `drizzle/schema.ts`; shared types = `lib/types.ts`. Docs link to these, don't duplicate them.
 
 ## Gotchas
 
 - Gemini model id is **`gemini-3-flash-preview`** — bare `gemini-3-flash` 404s on v1beta. Override with `GEMINI_MODEL`. Without `GEMINI_API_KEY`, `vlmExtract` returns a **stub** so the pipeline runs keyless.
-- Supabase serverless connections: use the **transaction pooler** string (port 6543); `lib/db.ts` sets `prepare: false` accordingly. The Drizzle client is **lazy** (no connection at import/build).
+- DB backend is **`DATABASE_URL`-only**: local Postgres (Postgres.app, `postgresql://<you>@localhost:5432/cpl_neighborhoods`) in dev; Supabase **transaction pooler** string (port 6543) when deployed. `lib/db.ts` sets `prepare: false` (required by the pooler, harmless locally) and is **lazy** (no connection at import/build). Postgres.app must be running for the local DB to be reachable.
+- Storage backend is auto-selected in `lib/storage.ts`: **local disk** (`public/derivatives/`) unless `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set; force either way with `STORAGE_BACKEND=local|supabase`. `fetchDerivativeBytes` reads relative `/derivatives/...` paths off disk and absolute URLs over HTTP.
 - The patron static site and the Next app currently **coexist**; don't assume a file is dead just because it's a root `*.jsx` — confirm against the Next import tree first.
 
 ## Documentation map

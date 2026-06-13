@@ -2,7 +2,8 @@
 
 > **Reference** (current truth — update in the same change that alters behavior). For *why*
 > decisions were made, see the dated logs in [`technical/`](../technical/).
-> Last reflects: the Next.js + Supabase migration of the staff/scan slice.
+> Last reflects: the Next.js + Supabase migration of the staff/scan slice, with
+> **local-by-default** dev backends (local Postgres + on-disk JPEG store).
 
 ## System at a glance
 
@@ -19,28 +20,34 @@
   /staff  ───────────────┤  client SPA: <StaffApp/> (NavContext router)   │
                          │   components/staff/* + components/scan/*        │
                          │                                                │
-  /api/scan/* ───────────┤  route handlers (Node runtime) ───────────────┼──► Supabase Postgres
+  /api/scan/* ───────────┤  route handlers (Node runtime) ───────────────┼──► Postgres¹
                          │   records · records/[chcId] · accuracy · retry │     scan_review
                          │                                                │     photo_enrichment
                          │  lib/ (db, scan-store, accuracy, vlm-extract,  │
-                         │        storage, scan-api, tokens, types)       │──► Supabase Storage
+                         │        storage, scan-api, tokens, types)       │──► JPEG store²
                          └──────────────────────────────────────────────┘     derivatives/*.jpg
                                                                                     ▲
   LOCAL CLI (offline)    ┌──────────────────────────────────────────────┐         │
   npm run scan:run ──────┤  scan/run.ts (tsx): for each masters/*.tif     │         │
                          │   sharp derive → upload JPEG ──────────────────┼─────────┘
-                         │   → vlmExtract (Gemini) → upsert scan_review    │──► Postgres
+                         │   → vlmExtract (Gemini) → upsert scan_review    │──► Postgres¹
                          └──────────────────────────────────────────────┘
 ```
+
+> ¹ **Postgres** — local Postgres (Postgres.app) in dev, Supabase Postgres when deployed.
+>   Selected purely by `DATABASE_URL`; `lib/db.ts` is backend-agnostic.
+> ² **JPEG store** — `lib/storage.ts` picks a backend: local disk (`public/derivatives/`,
+>   served by Next at `/derivatives/<chc>.jpg`) by default, or Supabase Storage when
+>   `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` are set. Force with `STORAGE_BACKEND=local|supabase`.
 
 ## What runs where (the load-bearing boundary)
 
 | Concern | Where it runs | Why |
 |---|---|---|
 | TIFF→JPEG derivation (`sharp`) | **Local CLI only** (`scan/run.ts`) | Reads local `masters/*.tif`; `sharp` + large TIFFs don't belong on serverless. Sidesteps the whole serverless-image problem. |
-| VLM read (Gemini) | Local CLI (batch) **and** serverless `retry` | Batch reads bytes from `sharp`; `retry` fetches the stored JPEG from Storage and re-runs — no filesystem needed. |
-| Review reads/writes | Serverless API routes → Postgres | Durable per-photo review; the "scan_review table" is now real. |
-| Derived image hosting | Supabase Storage (public URLs) | Serverless has no persistent disk; `scan_review.jpeg_url` is what the UI `<img>` loads. |
+| VLM read (Gemini) | Local CLI (batch) **and** serverless `retry` | Batch reads bytes from `sharp`; `retry` fetches the stored JPEG back from the store and re-runs — no filesystem needed. |
+| Review reads/writes | API routes → Postgres (local in dev, Supabase deployed) | Durable per-photo review; the "scan_review table" is now real. |
+| Derived image hosting | Pluggable (`lib/storage.ts`): local disk `public/derivatives/` in dev · Supabase Storage when deployed | The store writes the JPEG **once**; `scan_review.jpeg_path`/`jpeg_url` is what the UI `<img>` loads (relative `/derivatives/<chc>.jpg` locally, public URL on Supabase). |
 | Harvested ContentDM data | Static JSON (`public/data/tier3-all/records.json`) | Read-only; not in the DB for this slice. |
 
 ## Surfaces (staff app)
@@ -63,8 +70,8 @@ Shared chrome in `components/staff/shell.tsx`; shared primitives in `components/
 
 ## Backend
 
-- **Data store:** Supabase Postgres via Drizzle. Schema is the source of truth: [`drizzle/schema.ts`](../drizzle/schema.ts) (`scan_review`, `photo_enrichment`). See [`data-model.md`](data-model.md).
-- **DB access:** `lib/db.ts` — lazy Drizzle client, `prepare: false` for the Supabase transaction pooler.
+- **Data store:** plain Postgres via Drizzle — **local Postgres in dev**, Supabase Postgres when deployed. Switched by `DATABASE_URL` alone. Schema is the source of truth: [`drizzle/schema.ts`](../drizzle/schema.ts) (`scan_review`, `photo_enrichment`). See [`data-model.md`](data-model.md).
+- **DB access:** `lib/db.ts` — lazy, backend-agnostic Drizzle client. `prepare: false` (required by the Supabase transaction pooler; harmless against local Postgres).
 - **Store layer:** `lib/scan-store.ts` (read-modify-write, deep-merges the `review` JSONB; `buildEnrichment` builds the `photo_enrichment`-shaped accept payload — no geocoding in this pilot).
 - **API:** `app/api/scan/*` — see [`api.md`](api.md).
 - **Auth:** none yet (deferred). When added, it gates the staff routes; the SPA shell is the natural seam. Supabase Auth is the likely fit.
