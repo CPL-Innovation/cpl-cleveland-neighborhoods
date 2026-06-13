@@ -1,0 +1,16 @@
+{
+  "total": 99,
+  "with_sort_date": 95,
+  "with_latlng": 78,
+  "with_lat_only": 0,
+  "with_lng_only": 0,
+  "with_place": 99,
+  "with_subject": 99,
+  "with_rights_uri": 99,
+  "pct_with_sort_date": "96.0%",
+  "pct_with_latlng": "78.8%",
+  "pct_with_place": "100.0%",
+  "pct_with_subject": "100.0%",
+  "pct_with_rights_uri": "100.0%",
+  "generated_at": "2026-05-24T03:51:30.563Z"
+}

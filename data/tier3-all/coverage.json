@@ -1,0 +1,20 @@
+{
+  "total": 264,
+  "with_sort_date": 255,
+  "with_latlng": 237,
+  "with_place": 264,
+  "with_subject": 264,
+  "with_rights_uri": 264,
+  "pct_with_sort_date": "96.6%",
+  "pct_with_latlng": "89.8%",
+  "pct_with_place": "100.0%",
+  "subset_record_counts": {
+    "central": 165,
+    "clark-fulton": 99
+  },
+  "merged_subsets": [
+    "central",
+    "clark-fulton"
+  ],
+  "generated_at": "2026-05-24T03:51:30.598Z"
+}
