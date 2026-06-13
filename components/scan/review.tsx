@@ -134,8 +134,8 @@ function ScanReviewInner({
 
 function emptyClientReview(): Review {
   return {
-    address: { verdict: null, value: "", flag_reason: null },
-    year: { verdict: null, value: "", flag_reason: null },
+    address: { verdict: null, value: "" },
+    year: { verdict: null, value: "" },
     description: { verdict: null, value: "" },
     notes: "",
     status: "unreviewed",
@@ -269,9 +269,9 @@ function HandwritingVerdict({
     const v = draft.trim();
     // Formatting-only difference → count as a match, not an edit.
     if (normalize && normalize(v) === normalize(vlmValue)) {
-      onChange({ verdict: "correct", value: vlmValue, flag_reason: null });
+      onChange({ verdict: "correct", value: vlmValue });
     } else {
-      onChange({ verdict: "edited", value: v, flag_reason: null });
+      onChange({ verdict: "edited", value: v });
     }
     setEditing(false);
   };
@@ -293,23 +293,22 @@ function HandwritingVerdict({
           style={inputStyle(t)}
         />
       ) : (
-        <div style={{ fontFamily: t.serif, fontSize: 18, color: vlmValue ? t.ink : t.inkFaint, marginBottom: 8 }}>
+        <div style={{
+          fontFamily: t.serif, fontSize: 18, marginBottom: 8,
+          color: verdict === "illegible" ? t.inkFaint : (vlmValue ? t.ink : t.inkFaint),
+          textDecoration: verdict === "illegible" ? "line-through" : "none",
+        } as React.CSSProperties}>
           {verdict === "edited" ? field.value : (vlmValue || "(blank — VLM read nothing)")}
           {verdict === "edited" && <span style={{ fontFamily: t.mono, fontSize: 11, color: t.inkMuted, marginLeft: 8 }}>was: {vlmValue || "∅"}</span>}
+          {verdict === "illegible" && <span style={{ fontFamily: t.mono, fontSize: 11, color: t.ochre, marginLeft: 8, textDecoration: "none", display: "inline-block" }}>can&rsquo;t be read — excluded from accuracy</span>}
         </div>
       )}
 
       {!editing && (
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <VerdictBtn active={verdict === "correct"} color={t.sage} onClick={() => onChange({ verdict: "correct", value: vlmValue, flag_reason: null })}>✓ correct</VerdictBtn>
-          <VerdictBtn active={verdict === "edited"} color={t.teal} onClick={() => { setDraft(field.verdict === "edited" ? field.value : vlmValue); setEditing(true); }}>edit</VerdictBtn>
-          <VerdictBtn active={verdict === "flag"} color={t.terracotta} onClick={() => onChange({ verdict: "flag", value: "", flag_reason: field.flag_reason || "wrong" })}>✗ flag</VerdictBtn>
-          {verdict === "flag" && (
-            <span style={{ display: "inline-flex", gap: 4, marginLeft: 6 }}>
-              <ReasonChip active={field.flag_reason === "wrong"} onClick={() => onChange({ verdict: "flag", value: "", flag_reason: "wrong" })}>wrong</ReasonChip>
-              <ReasonChip active={field.flag_reason === "illegible"} onClick={() => onChange({ verdict: "flag", value: "", flag_reason: "illegible" })}>illegible</ReasonChip>
-            </span>
-          )}
+          <VerdictBtn active={verdict === "correct"} color={t.sage} title="VLM matched the handwriting" onClick={() => onChange({ verdict: "correct", value: vlmValue })}>✓ correct</VerdictBtn>
+          <VerdictBtn active={verdict === "edited"} color={t.teal} title="fix it (you can read the answer)" onClick={() => { setDraft(field.verdict === "edited" ? field.value : vlmValue); setEditing(true); }}>edit</VerdictBtn>
+          <VerdictBtn active={verdict === "illegible"} color={t.ochre} title="can't be read — excluded from accuracy" onClick={() => onChange({ verdict: "illegible", value: "" })}>illegible</VerdictBtn>
         </div>
       )}
     </div>
@@ -385,23 +384,13 @@ function NotesField({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-function VerdictBtn({ active, color, onClick, children }: { active: boolean; color: string; onClick: () => void; children: React.ReactNode }) {
+function VerdictBtn({ active, color, onClick, children, title }: { active: boolean; color: string; onClick: () => void; children: React.ReactNode; title?: string }) {
   const t = STAFF_TOKENS;
   return (
-    <button onClick={onClick} style={{
+    <button onClick={onClick} title={title} style={{
       padding: "6px 12px", fontSize: 12.5, fontFamily: "inherit", cursor: "pointer",
       background: active ? color : "#fff", color: active ? "#fff" : t.ink,
       border: `1px solid ${active ? color : t.border}`, borderRadius: 5, fontWeight: active ? 500 : 400,
-    }}>{children}</button>
-  );
-}
-function ReasonChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  const t = STAFF_TOKENS;
-  return (
-    <button onClick={onClick} style={{
-      padding: "3px 8px", fontSize: 11, fontFamily: t.mono, cursor: "pointer",
-      background: active ? t.terracotta : "#fff", color: active ? "#fff" : t.inkMuted,
-      border: `1px solid ${active ? t.terracotta : t.border}`, borderRadius: 10,
     }}>{children}</button>
   );
 }

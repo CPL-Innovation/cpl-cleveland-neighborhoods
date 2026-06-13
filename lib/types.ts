@@ -1,8 +1,9 @@
 // Shared types for the scan pipeline + enrichment. The JSONB columns in drizzle/schema.ts
 // are typed with these so the scan_review shape is checked end-to-end (CLI → DB → API → UI).
 
-export type AddressYearVerdict = "correct" | "edited" | "flag";
-export type FlagReason = "wrong" | "illegible";
+// Three flat verdicts: correct (VLM matched), edited (VLM wrong, reviewer fixed → the only
+// "miss"), illegible (no human can read it → excluded from the accuracy denominator).
+export type AddressYearVerdict = "correct" | "edited" | "illegible";
 export type DescriptionVerdict = "accepted" | "edited" | "rejected";
 export type RecordStatus = "discovered" | "derived" | "ready" | "failed";
 export type ReviewStatus = "unreviewed" | "reviewed";
@@ -10,7 +11,6 @@ export type ReviewStatus = "unreviewed" | "reviewed";
 export interface ReviewField {
   verdict: AddressYearVerdict | null;
   value: string;
-  flag_reason: FlagReason | null;
 }
 
 export interface ReviewDescription {
@@ -81,8 +81,8 @@ export interface ScanRecord {
 
 export function emptyReview(): Review {
   return {
-    address: { verdict: null, value: "", flag_reason: null },
-    year: { verdict: null, value: "", flag_reason: null },
+    address: { verdict: null, value: "" },
+    year: { verdict: null, value: "" },
     description: { verdict: null, value: "" },
     notes: "",
     status: "unreviewed",
@@ -100,8 +100,7 @@ export interface FieldMiss {
 export interface FieldStats {
   correct: number;
   edited: number;
-  flag_wrong: number;
-  flag_illegible: number;
+  illegible: number; // reported separately; NOT in the denominator
   unreviewed: number;
   denominator: number;
   correct_pct: number | null;

@@ -82,7 +82,7 @@ export function ScanAccuracy() {
             <span style={{ fontFamily: t.mono, fontSize: 10, color: t.inkMuted, textTransform: 'uppercase' } as React.CSSProperties}>{m.field}</span>
             <span style={{ flex: 1, fontSize: 12.5, color: t.inkSubtle }}>
               VLM: <span style={{ textDecoration: 'line-through' }}>{m.vlm || '∅'}</span>
-              {m.confirmed ? <> → <span style={{ color: t.sage }}>{m.confirmed}</span></> : <span style={{ color: t.inkFaint }}> (flagged, no correction)</span>}
+              {m.confirmed ? <> → <span style={{ color: t.sage }}>{m.confirmed}</span></> : <span style={{ color: t.inkFaint }}> (no correction)</span>}
             </span>
           </div>
         )) : <div style={{ color: t.inkFaint, fontSize: 13 }}>No misses recorded.</div>}
@@ -100,9 +100,9 @@ function FieldCard({ t, label, s }: { t: StaffTokens; label: string; s: FieldSta
         <>
           <div style={{ fontSize: 28, fontFamily: t.serif, color: t.ink }}>{pct}% <span style={{ fontSize: 14, color: t.inkMuted }}>correct</span></div>
           <div style={{ fontSize: 12.5, color: t.inkMuted, marginTop: 4 }}>
-            {s.correct}/{s.denominator} · edited {s.edited} · flagged-wrong {s.flag_wrong}
+            {s.correct}/{s.denominator} · edited {s.edited}
           </div>
-          {s.flag_illegible > 0 && <div style={{ fontSize: 11.5, color: t.inkFaint, marginTop: 2 }}>{s.flag_illegible} illegible (excluded)</div>}
+          {s.illegible > 0 && <div style={{ fontSize: 11.5, color: t.inkFaint, marginTop: 2 }}>{s.illegible} illegible (excluded)</div>}
         </>
       ) : <div style={{ color: t.inkFaint, fontSize: 13 }}>No reviewed records yet.</div>}
     </div>

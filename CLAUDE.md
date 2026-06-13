@@ -16,7 +16,7 @@ that review.
 
 - **Staff + scan surfaces: migrated** to Next.js 14 (App Router) + TypeScript. Live at `/staff`.
 - **Patron site (Leaflet map, landing): NOT migrated** — still the static prototype (`index.html` + root `*.jsx` via CDN React/Babel). A later pass.
-- **Superseded but still on disk** (inert, cleanup pending): root `*.jsx`, `enrichment-app.html`, `scan/server.mjs`, `scan/store.mjs`, the old `scan/*.mjs`. The Next tree does not import them.
+- **Superseded but still on disk** (inert, cleanup pending): root `*.jsx`, `enrichment-app.html`. The Next tree does not import them. (The legacy `scan/*.mjs` — `run/derive/store/server/accuracy/vlm-extract/normalize-address` — were deleted once the `.ts` pipeline took over; they collided with `@/scan/derive` resolution. Only `scan/env.mjs` remains, still loaded by the `.ts` CLIs.)
 - **Local-by-default in dev:** the DB is **local Postgres** (Postgres.app) and derived JPEGs live on **local disk** (`public/derivatives/`, served at `/derivatives/<chc>.jpg`). Both swap to Supabase (Postgres + Storage) by env vars alone — no code change. Supabase is the deploy target, not a dev dependency.
 - **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
 - **Auth: deferred** (clean seam left).
@@ -69,17 +69,19 @@ The scan CLI + drizzle-kit load env via `scan/env.mjs`; Next loads `.env.local` 
 ```
 app/
   staff/page.tsx          → renders <StaffApp/> (client SPA)
-  api/scan/...            → records, records/[chcId], accuracy, retry/[chcId]
+  api/scan/...            → records, records/[chcId], accuracy, retry/[chcId],
+                            masters (list masters/), ingest/[chcId] (UI-driven, local-only)
   layout.tsx, page.tsx, globals.css
 components/
   staff/                  → nav (NavContext), ui (shared primitives), shell, app (router),
                             home, photos-list, record-edit, story-author
-  scan/                   → pipeline (Surface A + scanApi consumers), review (B), accuracy (C)
+  scan/                   → pipeline (Surface A: worklist sheet + ingest modal), review (B),
+                            accuracy (C), ingest (Scan-inbox modal)
 lib/                      → db, scan-store, accuracy, vlm-extract, storage, scan-api,
-                            tokens, types, normalize-address
+                            scan-ingest (shared derive→store→VLM→DB core), tokens, types,
+                            normalize-address
 drizzle/                  → schema.ts (source of truth for the DB), migrations/
 scan/                     → run.ts / derive.ts / accuracy.ts (tsx CLI) + env.mjs
-                            (legacy *.mjs superseded)
 harvest/                  → ContentDM harvest pipeline (Tier 1→2→3, unchanged)
 data/ , public/data/      → harvested ContentDM JSON (read-only; patron + staff read this)
 technical/                → design LOGS (the why; append-only journal)
@@ -95,7 +97,7 @@ public/derivatives/       → derived JPEGs, local storage backend (gitignored; 
 - **Staff app is a client SPA** at `/staff` — navigation is React state via `NavContext`/`useNav` (`components/staff/nav.tsx`), **not** file-based routes. (Adopting file routing/RSC is a possible later refactor.)
 - **Shared UI primitives** (`pillBtn`, `Kbd`, `Field`, `FieldGroup`, `FieldFoot`, `inputStyle`, `textareaStyle`, `selectStyle`, `ChipInput`) live in `components/staff/ui.tsx` — import, don't redefine.
 - **`scanApi`** (client fetch wrapper) lives in `lib/scan-api.ts`; the old `window`-global pattern is retired.
-- **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Per-photo serverless `retry` only re-runs the VLM against the JPEG already in the store. The store writes the JPEG **once** — `scan/run.ts` no longer keeps a separate top-level `derivatives/` copy; `lib/storage.ts` owns the file (local disk or Supabase).
+- **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Both ingest doors — the `scan:run` CLI and the in-app **Scan inbox** (`/api/scan/masters` + `/api/scan/ingest`) — share one core (`lib/scan-ingest.ts`) and are **local-only** (the routes 403 on `VERCEL`). Per-photo serverless `retry` only re-runs the VLM against the JPEG already in the store. **Un-ingest** (`DELETE /api/scan/records/[chcId]`) drops the row + derivative (master TIFF stays) and *is* serverless-safe. The store writes the JPEG **once** — `lib/storage.ts` owns the file (local disk or Supabase).
 - **One source of truth per fact**: DB shape = `drizzle/schema.ts`; shared types = `lib/types.ts`. Docs link to these, don't duplicate them.
 
 ## Gotchas
