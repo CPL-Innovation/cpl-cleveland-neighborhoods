@@ -4,7 +4,7 @@ An archival map of historic Cleveland Public Library photographs, plus a library
 **enrichment interface** (staff app) and a **scan-and-interpret pipeline** that turns raw
 box-scan TIFFs into reviewed, machine-interpreted records.
 
-Pipeline at a glance: **Ingest → Prep (crop & deskew) → Scan pipeline → Run (VLM read) → Review.**
+The **Scan pipeline** area at a glance: **Prep (crop & deskew) → Ingest (derive + VLM read) → Review.**
 
 > **`CLAUDE.md` is the source of truth** for how this works now (stack, setup, layout,
 > conventions, gotchas). This file is just the front door. Deeper references live in

@@ -49,7 +49,7 @@ npm run scan:run -- --in some/dir     # point at a different masters folder
 npm run scan:accuracy                 # print the rollup + write data/scan/accuracy.csv
 ```
 
-- **UI-driven ingest** — in the staff app, **Ingest → Scan pipeline → Ingest ↓** opens the
+- **UI-driven ingest** — in the staff app, **Scan pipeline → Ingest → Ingest ↓** opens the
   **Scan inbox**: it lists `scans/masters/`, flags new vs. already-ingested, and ingests selected
   photos one at a time with live progress (same `derive → store → VLM → upsert` core as the CLI,
   in `lib/scan-ingest.ts`). **Local-only** — `sharp` derivation never runs in serverless, so the
@@ -62,7 +62,7 @@ Re-running is resumable: a master whose record is already `ready` is skipped (us
 
 ## The review surface
 
-Run `npm run dev` and open **`/staff` → Ingest → Scan pipeline**. The pipeline is a worklist
+Run `npm run dev` and open **`/staff` → Scan pipeline → Ingest**. The Ingest surface is a worklist
 sheet of every ingested photo (thumbnail · stage · VLM read · review verdicts). Click a ready
 row, or **Start review**, to judge each photo. Verdicts **auto-save** to Postgres via
 `/api/scan/records/[chcId]` and survive a reload.

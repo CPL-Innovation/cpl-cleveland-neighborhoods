@@ -11,8 +11,9 @@ enrichment interface** (staff app) and a **scan-and-interpret pipeline** that in
 TIFFs, runs one VLM read per photo (address · year · description), and lets a librarian review
 the output. The eval (accuracy of the VLM vs. the handwriting on the prints) is a by-product of
 that review. Upstream of all that, a **Prep** stage crops & deskews raw flatbed scans (`scans/raw/`)
-into the clean `scans/masters/` the rest of the pipeline assumes: `Ingest → Prep → Scan pipeline →
-Run → Review`.
+into the clean `scans/masters/` the rest of the pipeline assumes. The **Scan pipeline** area
+(sidebar section) runs `Prep → Ingest → Review`: Prep crops raw→masters, **Ingest** derives +
+VLM-reads masters into records, Review captures verdicts (with an Accuracy eval rollup).
 
 ## Status (read this first)
 
@@ -21,7 +22,7 @@ Run → Review`.
 - **Legacy prototype files removed.** The superseded staff/scan `*.jsx` and their host HTMLs (`enrichment-app.html`, `enrichment.html`, `mockup.html`) were deleted once the Next tree replaced them (recoverable from git history); a few `lib/`/`components/` files still carry `// Ported from <name>.jsx` provenance comments. The legacy `scan/*.mjs` were likewise deleted; only `scan/env.mjs` remains, still loaded by the `.ts` CLIs.
 - **Local-by-default in dev:** the DB is **local Postgres** (Postgres.app) and derived JPEGs live on **local disk** (`public/derivatives/`, served at `/derivatives/<chc>.jpg`). Both swap to Supabase (Postgres + Storage) by env vars alone — no code change. Supabase is the deploy target, not a dev dependency.
 - **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
-- **Prep (crop & deskew): built** — `/staff → Ingest → Prep`. A contact-sheet grid driving an OpenCV engine (`scan/crop_engine.py`, run as a local subprocess) that turns `scans/raw/<CHC>.tif` → `scans/masters/<CHC>.tif`. Local-only like the ingest doors. Verified end-to-end on real CPL scans. Needs `python3` + `cv2`/`numpy` (see Gotchas).
+- **Prep (crop & deskew): built** — `/staff → Scan pipeline → Prep`. A contact-sheet grid driving an OpenCV engine (`scan/crop_engine.py`, run as a local subprocess) that turns `scans/raw/<CHC>.tif` → `scans/masters/<CHC>.tif`. Local-only like the ingest doors. Verified end-to-end on real CPL scans. Needs `python3` + `cv2`/`numpy` (see Gotchas).
 - **Auth: deferred** (clean seam left).
 
 ## Stack
@@ -56,7 +57,7 @@ npm run dev                         # → http://localhost:3000/staff
 > non-interactive/CLI contexts. Force a storage backend explicitly with `STORAGE_BACKEND=local|supabase`.
 
 For the **Prep** stage: ensure `python3` has `cv2` + `numpy` (`pip install opencv-python numpy`),
-drop raw flatbed scans in `scans/raw/<CHC>.tif`, then `/staff → Ingest → Prep → Auto-crop`. Approve
+drop raw flatbed scans in `scans/raw/<CHC>.tif`, then `/staff → Scan pipeline → Prep → Auto-crop`. Approve
 writes `scans/masters/<CHC>.tif`, which `npm run scan:run` (or the Scan inbox) then ingests.
 
 `.env.local`, `.env`, `raw/`, `masters/`, `derivatives/`, `public/derivatives/`, `public/prep/`, `data/scan/`, `node_modules/` are gitignored.
@@ -85,7 +86,7 @@ components/
   staff/                  → nav (NavContext), ui (shared primitives), shell, app (router),
                             home, photos-list, record-edit, story-author
   scan/                   → prep (Prep contact-sheet grid) + prep-editor + prep-flags,
-                            pipeline (Surface A: worklist sheet + ingest modal), review (B),
+                            pipeline (Ingest surface: worklist sheet + scan-inbox modal), review (B),
                             accuracy (C), ingest (Scan-inbox modal)
 lib/                      → db, scan-store, accuracy, vlm-extract, storage, scan-api,
                             scan-ingest (shared derive→store→VLM→DB core),
@@ -113,7 +114,7 @@ public/prep/              → Prep preview JPEGs (gitignored; served at /prep/*)
 - **Shared UI primitives** (`pillBtn`, `Kbd`, `Field`, `FieldGroup`, `FieldFoot`, `inputStyle`, `textareaStyle`, `selectStyle`, `ChipInput`) live in `components/staff/ui.tsx` — import, don't redefine.
 - **`scanApi`** (client fetch wrapper) lives in `lib/scan-api.ts`; the old `window`-global pattern is retired.
 - **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Both ingest doors — the `scan:run` CLI and the in-app **Scan inbox** (`/api/scan/masters` + `/api/scan/ingest`) — share one core (`lib/scan-ingest.ts`) and are **local-only** (the routes 403 on `VERCEL`). Per-photo serverless `retry` only re-runs the VLM against the JPEG already in the store. **Un-ingest** (`DELETE /api/scan/records/[chcId]`) drops the row + derivative (master TIFF stays) and *is* serverless-safe. The store writes the JPEG **once** — `lib/storage.ts` owns the file (local disk or Supabase).
-- **Prep (crop/deskew) is a local job too**, same shape: `lib/prep-engine.ts` spawns `python3 scan/crop_engine.py` against a local TIFF; its routes (`/api/scan/prep`, `/api/scan/prep/[chcId]`) gate on `prepEnabled()` and 403 on `VERCEL`. The engine is **texture-based, not brightness** (grainy emulsion vs. smooth paper) — see [`technical/prep-surface.md`](technical/prep-surface.md). Prep's **only** handoff to Run is the `scans/masters/<CHC>.tif` it writes; don't make Run/Review depend on `scan_prep`. State lives in the `scan_prep` table (`pending|auto_ok|flagged|fixed|approved`).
+- **Prep (crop/deskew) is a local job too**, same shape: `lib/prep-engine.ts` spawns `python3 scan/crop_engine.py` against a local TIFF; its routes (`/api/scan/prep`, `/api/scan/prep/[chcId]`) gate on `prepEnabled()` and 403 on `VERCEL`. The engine is **texture-based, not brightness** (grainy emulsion vs. smooth paper) — see [`technical/prep-surface.md`](technical/prep-surface.md). Prep's **only** handoff to the Ingest stage is the `scans/masters/<CHC>.tif` it writes; don't make Ingest/Review depend on `scan_prep`. State lives in the `scan_prep` table (`pending|auto_ok|flagged|fixed|approved`).
 - **One source of truth per fact**: DB shape = `drizzle/schema.ts`; shared types = `lib/types.ts`. Docs link to these, don't duplicate them.
 
 ## Gotchas

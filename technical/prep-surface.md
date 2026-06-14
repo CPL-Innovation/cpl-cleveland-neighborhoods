@@ -8,17 +8,17 @@ created: 2026-06-13
 
 > **Last updated:** 2026-06-13 · v1.0 · status: built
 
-The first stage of the Scan Pipeline, inside the enrichment interface:
-**Ingest → Prep → Scan pipeline → Run → Review**. Live at `/staff → Ingest → Prep`.
+The first stage of the **Scan pipeline** area, inside the enrichment interface:
+**Prep → Ingest → Review**. Live at `/staff → Scan pipeline → Prep`.
 
 Raw flatbed scans of physical prints carry three zones: the scanner bed (white around the
 print), the print's own white **paper border**, and the **photographic image** (emulsion) with
 any ink written on it. Prep removes the first two and corrects skew, turning `scans/raw/<CHC>.tif`
-into the clean `scans/masters/<CHC>.tif` that the downstream **Run** stage already assumes. The
+into the clean `scans/masters/<CHC>.tif` that the downstream **Ingest** stage already assumes. The
 eval of Prep is visual: a crop is verifiable in a thumbnail, so the surface is a **contact-sheet
 grid**, not a one-photo screen like Review.
 
-`scans/masters/` is the boundary. Prep only ever *writes* it; Run/Review are untouched.
+`scans/masters/` is the boundary. Prep only ever *writes* it; Ingest/Review are untouched.
 
 ## Crop target (precise)
 
@@ -73,7 +73,7 @@ caption band, the chrome of parked cars) instead of the whole grayscale photo �
   resize · top handle to rotate) pre-filled with the engine's box, over the raw scan. Adjust by
   hand, or **Looser / Tighter** to recompute, then **Save** (→ `fixed`) or **Approve → master**.
 - **Approve all → masters:** writes `scans/masters/<CHC>.tif` (lossless) for every `auto_ok`/
-  `fixed` tile, then hands off to the Run stage (Scan pipeline). Nothing reaches Run until approved.
+  `fixed` tile, then hands off to the Ingest stage. Nothing reaches Ingest until approved.
 - **Durability:** a per-CHC `scan_prep` row (`pending | auto_ok | flagged | fixed | approved`),
   same promise as Review — a batch survives a closed laptop.
 - **Throughput stat** (`processed · flagged · wall-clock`) — the staff-time-saved metric this
@@ -96,7 +96,7 @@ public/prep/<CHC>.{raw,crop}.jpg   (previews; served at /prep/*, gitignored)
 scan_prep  (Postgres row, keyed by CHC ID — the durable prep state)
   │  /staff Prep grid + crop editor read/write via /api/scan/prep[/<CHC>]
   ▼
-scans/masters/<CHC>.tif   ──hand off──▶  Run stage (Scan pipeline), unchanged
+scans/masters/<CHC>.tif   ──hand off──▶  Ingest stage (Scan pipeline area), unchanged
 ```
 
 - Engine (Node side): `lib/prep-engine.ts` — `autoCropOne · recropOne · applyOne · listRaw`.
