@@ -10,7 +10,7 @@
 // Server-side only (the Supabase path uses the service-role key). Both `uploadDerivative`
 // (local CLI) and `fetchDerivativeBytes` (serverless retry) work against either backend.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 
 const BUCKET = process.env.SUPABASE_DERIVATIVES_BUCKET || "derivatives";
@@ -75,6 +75,19 @@ async function uploadSupabase(chcId: string, jpeg: Buffer | Uint8Array): Promise
 /** Upload a derived JPEG (idempotent) and return its URL (relative for local, public for Supabase). */
 export async function uploadDerivative(chcId: string, jpeg: Buffer | Uint8Array): Promise<string> {
   return useSupabase() ? uploadSupabase(chcId, jpeg) : uploadLocal(chcId, jpeg);
+}
+
+/** Delete a stored derivative (un-ingest). Best-effort: a missing file is not an error. */
+export async function deleteDerivative(chcId: string): Promise<void> {
+  try {
+    if (useSupabase()) {
+      await admin().storage.from(BUCKET).remove([`${chcId}.jpg`]);
+    } else {
+      await rm(join(LOCAL_DERIV_DIR, `${chcId}.jpg`), { force: true });
+    }
+  } catch {
+    /* already gone / storage hiccup — deletion of the DB row is what matters */
+  }
 }
 
 /** Fetch a stored derivative's bytes (used by the retry path for a server-side VLM re-run). */

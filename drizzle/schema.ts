@@ -8,7 +8,31 @@ import {
   boolean,
   date,
 } from "drizzle-orm/pg-core";
-import type { DeriveMeta, EnrichmentDraft, Review, VlmResult } from "@/lib/types";
+import type {
+  DeriveMeta, EnrichmentDraft, Review, VlmResult, PrepBox, PrepFlag,
+} from "@/lib/types";
+
+// Prep stage working record (crop & deskew). Keyed by CHC ID, upstream of scan_review:
+// Prep reads raw/<CHC>.tif and, on approve, writes the cropped+deskewed masters/<CHC>.tif
+// that the Run/ingest pipeline then consumes. Durable so a batch survives a closed laptop.
+export const scanPrep = pgTable("scan_prep", {
+  chcId: text("chc_id").primaryKey(),
+  rawPath: text("raw_path"), // raw/<CHC>.tif (input flatbed scan)
+  status: text("status").notNull().default("pending"), // PrepStatus
+  box: jsonb("box").$type<PrepBox>(), // crop box in raw full-res pixels
+  flags: jsonb("flags").$type<PrepFlag[]>(), // engine flags (clip_top, large_angle, …)
+  rawW: integer("raw_w"),
+  rawH: integer("raw_h"),
+  rawPreview: text("raw_preview"), // /prep/<CHC>.raw.jpg
+  cropPreview: text("crop_preview"), // /prep/<CHC>.crop.jpg
+  thresholdMult: numeric("threshold_mult"), // variance-threshold knob used (looser/tighter)
+  areaFrac: numeric("area_frac"), // largest-component area fraction (detection confidence)
+  ms: integer("ms"), // last engine wall-clock — the throughput stat
+  masterPath: text("master_path"), // masters/<CHC>.tif once approved
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
 
 // The per-photo working record. Separate from photo_enrichment until accept.
 // Verdicts ARE the eval (see technical/scan-pipeline-ux.md).
@@ -81,3 +105,5 @@ export const photoEnrichment = pgTable("photo_enrichment", {
 
 export type ScanReviewRow = typeof scanReview.$inferSelect;
 export type ScanReviewInsert = typeof scanReview.$inferInsert;
+export type ScanPrepRow = typeof scanPrep.$inferSelect;
+export type ScanPrepInsert = typeof scanPrep.$inferInsert;

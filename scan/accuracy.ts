@@ -15,7 +15,7 @@ async function main() {
   );
   const line = (label: string, s: typeof acc.address) =>
     s.denominator
-      ? `  ${label}: ${s.correct_pct}% correct (${s.correct}/${s.denominator}; edited ${s.edited}, flagged-wrong ${s.flag_wrong}${s.flag_illegible ? `, illegible ${s.flag_illegible} excluded` : ""})`
+      ? `  ${label}: ${s.correct_pct}% correct (${s.correct}/${s.denominator}; edited ${s.edited}${s.illegible ? `, illegible ${s.illegible} excluded` : ""})`
       : `  ${label}: no reviewed records yet`;
   console.log("Handwriting accuracy (illegible excluded):");
   console.log(line("Address", acc.address));
@@ -28,7 +28,7 @@ async function main() {
   if (acc.misses.length) {
     console.log(`\nPhotos the VLM got wrong (${acc.misses.length}):`);
     for (const m of acc.misses) {
-      console.log(`  - ${m.chc_id} [${m.field}] VLM: "${m.vlm}"${m.confirmed ? ` → human: "${m.confirmed}"` : " (flagged)"}`);
+      console.log(`  - ${m.chc_id} [${m.field}] VLM: "${m.vlm}"${m.confirmed ? ` → human: "${m.confirmed}"` : " (no value)"}`);
     }
   }
 

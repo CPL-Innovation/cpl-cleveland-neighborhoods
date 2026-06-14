@@ -14,7 +14,7 @@ export async function POST(_req: Request, { params }: { params: { chcId: string 
   if (!rec) return NextResponse.json({ error: "unknown chc_id" }, { status: 404 });
   if (!rec.jpeg_url) {
     return NextResponse.json(
-      { error: "no derivative in storage — run `node scan/run.mjs --only " + params.chcId + "` locally first" },
+      { error: "no derivative in storage — ingest it from the Scan inbox, or run `npm run scan:run -- --only " + params.chcId + "` locally first" },
       { status: 400 }
     );
   }

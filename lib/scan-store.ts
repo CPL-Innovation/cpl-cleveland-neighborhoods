@@ -33,6 +33,12 @@ export async function getRecord(chcId: string): Promise<ScanRecord | null> {
   return rows[0] ? rowToRecord(rows[0]) : null;
 }
 
+// Remove a record from the pipeline (un-ingest). Drops the scan_review row; the caller also
+// deletes the derivative. The master TIFF in masters/ is untouched, so it can be re-ingested.
+export async function deleteRecord(chcId: string): Promise<void> {
+  await getDb().delete(scanReview).where(eq(scanReview.chcId, chcId));
+}
+
 // Patch shape: any top-level ScanRecord fields. `review` is deep-merged one level so a
 // partial review patch (e.g. just the address verdict) preserves the rest of the review.
 export type ScanPatch = Partial<Omit<ScanRecord, "chc_id" | "created_at" | "updated_at">>;

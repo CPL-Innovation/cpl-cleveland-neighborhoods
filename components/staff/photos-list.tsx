@@ -316,7 +316,7 @@ function PhotosSheet() {
         {cols.map(c => (
           <div key={c.id} style={{
             width: c.w, flexShrink: 0,
-            padding: '8px 10px',
+            padding: c.id === 'thumb' ? 4 : '8px 10px',
             borderRight: `1px solid ${t.borderSoft}`,
             display: 'flex', alignItems: 'center',
           }}>

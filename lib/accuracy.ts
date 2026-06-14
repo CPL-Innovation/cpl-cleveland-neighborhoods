@@ -9,24 +9,23 @@ import type {
 } from "@/lib/types";
 
 function fieldStats(records: ScanRecord[], field: "address" | "year"): FieldStats {
-  let correct = 0, edited = 0, flagWrong = 0, flagIllegible = 0, unreviewed = 0;
+  let correct = 0, edited = 0, illegible = 0, unreviewed = 0;
   const misses: FieldMiss[] = [];
   for (const r of records) {
     const f = r.review?.[field];
     const v = f?.verdict;
     if (v === "correct") correct++;
     else if (v === "edited") {
+      // `edited` is the only "wrong" path — VLM read vs. reviewer's truth.
       edited++;
       misses.push({ chc_id: r.chc_id, field, vlm: r.vlm?.[field] ?? "", confirmed: f.value ?? "" });
-    } else if (v === "flag") {
-      if (f.flag_reason === "illegible") flagIllegible++;
-      else { flagWrong++; misses.push({ chc_id: r.chc_id, field, vlm: r.vlm?.[field] ?? "", confirmed: "" }); }
-    } else unreviewed++;
+    } else if (v === "illegible") illegible++;
+    else unreviewed++;
   }
-  // Denominator excludes illegible flags (not the VLM's fault) and unreviewed.
-  const denom = correct + edited + flagWrong;
+  // Denominator excludes illegible (no human can read it) and unreviewed.
+  const denom = correct + edited;
   return {
-    correct, edited, flag_wrong: flagWrong, flag_illegible: flagIllegible, unreviewed,
+    correct, edited, illegible, unreviewed,
     denominator: denom,
     correct_pct: denom ? Math.round((correct / denom) * 1000) / 10 : null,
     misses,
@@ -81,8 +80,8 @@ function csvCell(v: unknown): string {
 export function toCSV(records: ScanRecord[]): string {
   const header = [
     "chc_id", "status", "review_status",
-    "address_verdict", "address_vlm", "address_confirmed", "address_flag_reason",
-    "year_verdict", "year_vlm", "year_confirmed", "year_flag_reason",
+    "address_verdict", "address_vlm", "address_confirmed",
+    "year_verdict", "year_vlm", "year_confirmed",
     "description_verdict", "description_vlm", "description_confirmed",
     "notes",
   ];
@@ -91,8 +90,8 @@ export function toCSV(records: ScanRecord[]): string {
     const a = r.review?.address, y = r.review?.year, d = r.review?.description;
     rows.push([
       r.chc_id, r.status, r.review?.status || "unreviewed",
-      a?.verdict || "", r.vlm?.address || "", a?.value || "", a?.flag_reason || "",
-      y?.verdict || "", r.vlm?.year || "", y?.value || "", y?.flag_reason || "",
+      a?.verdict || "", r.vlm?.address || "", a?.value || "",
+      y?.verdict || "", r.vlm?.year || "", y?.value || "",
       d?.verdict || "", r.vlm?.description || "", d?.value || "",
       r.review?.notes || "",
     ].map(csvCell).join(","));

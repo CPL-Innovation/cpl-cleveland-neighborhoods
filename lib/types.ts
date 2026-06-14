@@ -1,8 +1,9 @@
 // Shared types for the scan pipeline + enrichment. The JSONB columns in drizzle/schema.ts
 // are typed with these so the scan_review shape is checked end-to-end (CLI → DB → API → UI).
 
-export type AddressYearVerdict = "correct" | "edited" | "flag";
-export type FlagReason = "wrong" | "illegible";
+// Three flat verdicts: correct (VLM matched), edited (VLM wrong, reviewer fixed → the only
+// "miss"), illegible (no human can read it → excluded from the accuracy denominator).
+export type AddressYearVerdict = "correct" | "edited" | "illegible";
 export type DescriptionVerdict = "accepted" | "edited" | "rejected";
 export type RecordStatus = "discovered" | "derived" | "ready" | "failed";
 export type ReviewStatus = "unreviewed" | "reviewed";
@@ -10,7 +11,6 @@ export type ReviewStatus = "unreviewed" | "reviewed";
 export interface ReviewField {
   verdict: AddressYearVerdict | null;
   value: string;
-  flag_reason: FlagReason | null;
 }
 
 export interface ReviewDescription {
@@ -47,6 +47,60 @@ export interface DeriveMeta {
   outDpi?: number;
 }
 
+// ── Prep stage (crop & deskew) — turns raw/ flatbed scans into clean masters/ ──
+// A separate working domain from scan_review: Prep's only output is masters/<CHC>.tif,
+// which is the boundary the downstream Run stage already assumes.
+export type PrepStatus = "pending" | "auto_ok" | "flagged" | "fixed" | "approved";
+
+// Engine flag keys (kept as strings so adding heuristics needs no schema change):
+//   clip_top · large_angle · extreme_aspect · multi_component · detect_weak
+export type PrepFlag = string;
+
+// The crop box in RAW full-resolution pixels — center, size, skew angle (deg).
+// deskew rotates by -angle. The frontend editor maps these to screen with one uniform scale.
+export interface PrepBox {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  angle: number;
+}
+
+export interface PrepRecord {
+  chc_id: string;
+  raw_path: string | null; // raw/<CHC>.tif (the input flatbed scan)
+  status: PrepStatus;
+  box: PrepBox | null;
+  flags: PrepFlag[];
+  raw_w: number | null;
+  raw_h: number | null;
+  raw_preview: string | null; // /prep/<CHC>.raw.jpg (served off public/)
+  crop_preview: string | null; // /prep/<CHC>.crop.jpg
+  threshold_mult: number;
+  area_frac: number | null;
+  ms: number | null; // last engine wall-clock (ms) — feeds the throughput stat
+  master_path: string | null; // masters/<CHC>.tif once approved + written
+  error: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// raw/ folder listing cross-referenced with prep state (mirrors MasterEntry's shape).
+// Carries enough of the prep row that the contact-sheet grid AND the crop editor share one
+// list call: previews for the tiles, box + raw dimensions for the editor's overlay.
+export interface RawEntry {
+  file: string;
+  chc_id: string;
+  size: number;
+  status: PrepStatus | "new"; // "new" when no prep row exists yet
+  flags: PrepFlag[];
+  raw_preview: string | null;
+  crop_preview: string | null;
+  box: PrepBox | null;
+  raw_w: number | null;
+  raw_h: number | null;
+}
+
 // What the `accept` path writes — photo_enrichment-shaped (a subset for this slice).
 export interface EnrichmentDraft {
   patron_caption: string | null;
@@ -81,8 +135,8 @@ export interface ScanRecord {
 
 export function emptyReview(): Review {
   return {
-    address: { verdict: null, value: "", flag_reason: null },
-    year: { verdict: null, value: "", flag_reason: null },
+    address: { verdict: null, value: "" },
+    year: { verdict: null, value: "" },
     description: { verdict: null, value: "" },
     notes: "",
     status: "unreviewed",
@@ -100,8 +154,7 @@ export interface FieldMiss {
 export interface FieldStats {
   correct: number;
   edited: number;
-  flag_wrong: number;
-  flag_illegible: number;
+  illegible: number; // reported separately; NOT in the denominator
   unreviewed: number;
   denominator: number;
   correct_pct: number | null;
