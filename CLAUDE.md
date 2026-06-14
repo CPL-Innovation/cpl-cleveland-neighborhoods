@@ -1,8 +1,11 @@
 # CLAUDE.md
 
 Project spine for both humans and Claude Code. This is a **reference** doc — present-tense
-"how it works now," kept in sync with the code. For the *why* behind decisions, read the
-dated design logs in [`technical/`](technical/).
+"how it works now," kept in sync with the code. For the *why/what* behind decisions, read the
+design specs in the **Obsidian design vault** (`…/Second Brain/01 Develop/CPL Cleveland
+Neighborhoods/build/`, entry point `build/BUILD-SPEC.md`) — these moved out of the repo's old
+`technical/` folder and are now read-only design intent (the repo stays the source of truth for
+*implementation*; intent changes route back via `build/_FROM-BUILD.md`).
 
 ## What this is
 
@@ -102,8 +105,8 @@ scan/                     → run.ts / derive.ts / accuracy.ts (tsx CLI) + env.m
                             crop_engine.py (OpenCV crop/deskew, subprocess)
 harvest/                  → ContentDM harvest pipeline (Tier 1→2→3, unchanged)
 data/ , public/data/      → harvested ContentDM JSON (read-only; patron + staff read this)
-technical/                → design LOGS (the why; append-only journal)
 docs/                     → reference docs (current truth — this file's siblings)
+                            (design specs live OUTSIDE the repo — in the Obsidian build/ vault)
 scans/                    → local-only inputs (gitignored, never web-served):
   raw/                    →   raw flatbed scans, Prep input
   masters/                →   box-scan TIFFs: Prep output + Run input
@@ -119,7 +122,7 @@ public/prep/              → Prep preview JPEGs (gitignored; served at /prep/*)
 - **Shared UI primitives** (`pillBtn`, `Kbd`, `Field`, `FieldGroup`, `FieldFoot`, `inputStyle`, `textareaStyle`, `selectStyle`, `ChipInput`) live in `components/staff/ui.tsx` — import, don't redefine.
 - **`scanApi`** (client fetch wrapper) lives in `lib/scan-api.ts`; the old `window`-global pattern is retired.
 - **Derivation is a local job.** `sharp` reads local TIFFs; serverless never derives. Both ingest doors — the `scan:run` CLI and the in-app **Scan inbox** (`/api/scan/masters` + `/api/scan/ingest`) — share one core (`lib/scan-ingest.ts`) and are **local-only** (the routes 403 on `VERCEL`). Per-photo serverless `retry` only re-runs the VLM against the JPEG already in the store. **Un-ingest** (`DELETE /api/scan/records/[chcId]`) drops the row + derivative (master TIFF stays) and *is* serverless-safe. The store writes the JPEG **once** — `lib/storage.ts` owns the file (local disk or Supabase).
-- **Prep (crop/deskew) is a local job too**, same shape: `lib/prep-engine.ts` spawns `python3 scan/crop_engine.py` against a local TIFF; its routes (`/api/scan/prep`, `/api/scan/prep/[chcId]`) gate on `prepEnabled()` and 403 on `VERCEL`. The engine is **texture-based, not brightness** (grainy emulsion vs. smooth paper) — see [`technical/prep-surface.md`](technical/prep-surface.md). Prep's **only** handoff to the Ingest stage is the `scans/masters/<CHC>.tif` it writes; don't make Ingest/Review depend on `scan_prep`. State lives in the `scan_prep` table (`pending|auto_ok|flagged|fixed|approved`).
+- **Prep (crop/deskew) is a local job too**, same shape: `lib/prep-engine.ts` spawns `python3 scan/crop_engine.py` against a local TIFF; its routes (`/api/scan/prep`, `/api/scan/prep/[chcId]`) gate on `prepEnabled()` and 403 on `VERCEL`. The engine is **texture-based, not brightness** (grainy emulsion vs. smooth paper) — see `build/digitization/tooling/crop-deskew-spec.md` (Obsidian design vault). Prep's **only** handoff to the Ingest stage is the `scans/masters/<CHC>.tif` it writes; don't make Ingest/Review depend on `scan_prep`. State lives in the `scan_prep` table (`pending|auto_ok|flagged|fixed|approved`).
 - **One source of truth per fact**: DB shape = `drizzle/schema.ts`; shared types = `lib/types.ts`. Docs link to these, don't duplicate them.
 
 ## Gotchas
@@ -132,5 +135,5 @@ public/prep/              → Prep preview JPEGs (gitignored; served at /prep/*)
 
 ## Documentation map
 
-- **References (current truth — keep synced):** this file · [`docs/architecture.md`](docs/architecture.md) · [`docs/data-model.md`](docs/data-model.md) · [`docs/api.md`](docs/api.md) · co-located [`scan/README.md`](scan/README.md), [`harvest/README.md`](harvest/README.md)
-- **Logs (the why — append-only journal):** [`technical/`](technical/) — e.g. `prep-surface.md`, `scan-pipeline-ux.md`, `vlm-description-spec.md`, `enrichment-schema.md`, `data-architecture.md`
+- **References (current truth — keep synced; in-repo):** this file · [`docs/architecture.md`](docs/architecture.md) · [`docs/data-model.md`](docs/data-model.md) · [`docs/api.md`](docs/api.md) · co-located [`scan/README.md`](scan/README.md), [`harvest/README.md`](harvest/README.md)
+- **Design specs (the why/what — in the Obsidian vault, *not* the repo):** entry point `build/BUILD-SPEC.md` — e.g. `build/enrichment-app/scan-pipeline-ux.md`, `build/enrichment-app/vlm-description-spec.md`, `build/data-backend/enrichment-schema.md`, `build/data-backend/data-architecture.md`, `build/digitization/tooling/crop-deskew-spec.md`. Intent changes route back via `build/_FROM-BUILD.md`.
