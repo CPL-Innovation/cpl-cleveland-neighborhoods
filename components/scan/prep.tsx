@@ -107,7 +107,7 @@ export function ScanPrep() {
     }
     setRunningId(null);
     setBatch(null);
-    nav.toast(`Wrote ${ok} master${ok === 1 ? "" : "s"} → ready to ingest in Scan pipeline`, "ok");
+    nav.toast(`Wrote ${ok} master${ok === 1 ? "" : "s"} → ready for the Ingest stage`, "ok");
   }
 
   const newCount = counts.new;

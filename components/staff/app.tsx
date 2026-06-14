@@ -25,10 +25,10 @@ const VIEWS: Record<string, { section: string; title: string; meta: string }> = 
   story: { section: "stories", title: "", meta: "DRAFT · CO-AUTHORED" },
   contrib: { section: "contrib", title: "Contributions", meta: "8 PENDING · PATRON" },
   vocab: { section: "vocab", title: "Vocabularies", meta: "6 LISTS" },
-  scanPrep: { section: "prep", title: "Prep", meta: "INGEST · CROP & DESKEW" },
-  scanPipeline: { section: "ingest", title: "Scan pipeline", meta: "INGEST · BOX-SCAN" },
-  scanReview: { section: "ingest", title: "Review & interpret", meta: "INGEST · SCAN REVIEW" },
-  scanAccuracy: { section: "ingest", title: "Accuracy", meta: "INGEST · EVAL" },
+  scanPrep: { section: "prep", title: "Prep", meta: "SCAN PIPELINE · CROP & DESKEW" },
+  scanPipeline: { section: "ingest", title: "Ingest", meta: "SCAN PIPELINE · BOX-SCAN" },
+  scanReview: { section: "ingest", title: "Review & interpret", meta: "SCAN PIPELINE · SCAN REVIEW" },
+  scanAccuracy: { section: "ingest", title: "Accuracy", meta: "SCAN PIPELINE · EVAL" },
 };
 
 interface Toast { id: string; text: string; tone: ToastTone }

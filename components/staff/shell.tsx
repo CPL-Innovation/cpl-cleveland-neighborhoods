@@ -94,10 +94,10 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
           />
         ))}
 
-        {/* Ingest — new records entering the system, awaiting first-pass treatment. */}
-        <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Ingest</div>
+        {/* Scan pipeline — box-scan records entering the system: prep → ingest → review. */}
+        <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Scan pipeline</div>
         <SidebarItem active={activeSection === "prep"} glyph={<PrepGlyph />} label="Prep" hint="crop · deskew" onClick={() => nav.navigate("scanPrep")} />
-        <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Scan pipeline" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
+        <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Ingest" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
         <SidebarItem subtle label="Sync inbox" hint="ContentDM" onClick={() => nav.toast("Sync inbox — existing ContentDM upstream path (not built in this MVP)", "info")} />
 
         <div style={{ flex: 1 }} />
