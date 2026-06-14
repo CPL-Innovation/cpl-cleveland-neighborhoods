@@ -1,7 +1,8 @@
 # Scan & Interpret Pipeline
 
-Implements [`../technical/scan-pipeline-ux.md`](../technical/scan-pipeline-ux.md) (Tier 1 —
-extraction) and the prompt in [`../technical/vlm-description-spec.md`](../technical/vlm-description-spec.md).
+Implements the scan-pipeline design (Tier 1 — extraction). The VLM prompt is vendored at
+[`../lib/vlm-prompt.ts`](../lib/vlm-prompt.ts); its canonical design intent + rationale live
+in the design vault at `build/enrichment-app/` (`scan-pipeline-ux.md`, `vlm-description-spec.md`).
 
 Box-scan TIFF masters → derived JPEGs → one VLM read each (address · year · description) →
 human review → an Accuracy rollup. Tier 2 interpretation, geocoding, and the re-runnable

@@ -1,12 +1,12 @@
 // vlmExtract — the single VLM adapter, ported from scan/vlm-extract.mjs to TS.
 // Takes image BYTES (so the CLI passes a local file's buffer and the serverless retry
 // path passes bytes fetched from Storage). Engine = Gemini 3 Flash behind this boundary;
-// the prompt + era-honesty rules load from technical/vlm-description-spec.md.
+// the prompt + era-honesty rules are vendored in lib/vlm-prompt.ts (canonical intent:
+// build/enrichment-app/vlm-description-spec.md in the design vault).
 //
 // Stub mode when GEMINI_API_KEY is unset → canned JSON, so the pipeline runs keyless.
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { VlmResult } from "@/lib/types";
+import { VLM_PROMPT } from "@/lib/vlm-prompt";
 
 // Spec front-runner "Gemini 3 Flash" → published id `gemini-3-flash-preview`.
 export const MODEL = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
@@ -25,19 +25,6 @@ const RESPONSE_SCHEMA = {
   required: ["address", "year", "description"],
   propertyOrdering: ["address", "year", "description", "objects"],
 };
-
-let _promptCache: string | null = null;
-
-export async function loadPrompt(): Promise<string> {
-  if (_promptCache) return _promptCache;
-  const md = await readFile(resolve(process.cwd(), "technical/vlm-description-spec.md"), "utf8");
-  const head = md.indexOf("## The prompt");
-  const region = head === -1 ? md : md.slice(head);
-  const fence = region.match(/```[a-z]*\n([\s\S]*?)```/);
-  if (!fence) throw new Error("Could not find the prompt code-fence in vlm-description-spec.md");
-  _promptCache = fence[1].trim();
-  return _promptCache;
-}
 
 function isTransient(err: unknown): boolean {
   const m = String((err as Error)?.message ?? err);
@@ -125,13 +112,12 @@ export async function vlmExtract(jpeg: Buffer | Uint8Array, chcId = "image"): Pr
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return stubResult(chcId);
 
-  const [prompt] = await Promise.all([loadPrompt()]);
   const base64 = Buffer.from(jpeg).toString("base64");
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      return await callGemini(base64, prompt, apiKey);
+      return await callGemini(base64, VLM_PROMPT, apiKey);
     } catch (err) {
       lastErr = err;
       if (!isTransient(err)) throw err;
