@@ -1,0 +1,221 @@
+/* Patron map styles — ported from index.html's <style> block. These target Leaflet's
+   injected DOM (panes, div-icon markers, tooltips), so they must be global, not module-scoped.
+   All classes are namespaced (.leaflet-*, .cm-*) so they don't touch the staff UI. */
+
+/* Leaflet container blends with the cream paper background.
+   isolation: isolate caps the inner pane z-indexes (up to 700) inside
+   this container's stacking context, so app overlays sit cleanly on top. */
+.leaflet-container {
+  background: #f1ece2;
+  font-family: "Work Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  outline: none;
+  position: relative;
+  z-index: 0;
+  isolation: isolate;
+}
+/* Subtle warm tone on the otherwise grey-blue Positron tiles. */
+.leaflet-tile-pane {
+  filter: sepia(0.18) saturate(0.85) hue-rotate(-6deg) brightness(1.02);
+}
+
+.leaflet-control-attribution {
+  background: rgba(246, 242, 235, 0.78) !important;
+  backdrop-filter: blur(6px);
+  font-family: "JetBrains Mono", ui-monospace, monospace !important;
+  font-size: 10px !important;
+  color: #6b6359 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px 0 0 0;
+}
+.leaflet-control-attribution a {
+  color: #1f5963 !important;
+}
+
+/* ── Photo dots — div-icon markers, styled in CSS ──────────── */
+.leaflet-div-icon,
+.cm-dot-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+.cm-dot {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: pointer;
+  color: #a8362b;
+  will-change: transform;
+}
+.cm-dot--featured {
+  color: #c8983a;
+}
+.cm-dot--dim {
+  color: #a39684;
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+}
+.cm-dot-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.14;
+  transform: scale(0.55);
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+}
+.cm-dot-core {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 0.5px rgba(26, 24, 20, 0.45), 0 1.5px 3px rgba(26, 24, 20, 0.22);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 220ms ease;
+}
+.cm-dot--featured .cm-dot-core {
+  width: 10px;
+  height: 10px;
+  box-shadow: 0 0 0 1px rgba(200, 152, 58, 0.55), 0 0 10px rgba(200, 152, 58, 0.55),
+    0 1.5px 3px rgba(26, 24, 20, 0.18);
+}
+.cm-dot--dim .cm-dot-core {
+  width: 5px;
+  height: 5px;
+  box-shadow: 0 0 0 0.5px rgba(26, 24, 20, 0.25);
+}
+.cm-dot:hover .cm-dot-ring {
+  transform: scale(1.4);
+  opacity: 0.32;
+}
+.cm-dot:hover .cm-dot-core {
+  transform: scale(1.35);
+}
+.cm-dot--selected .cm-dot-ring {
+  transform: scale(1.75);
+  opacity: 0.5;
+  animation: cmDotSelectedPulse 2.2s ease-in-out infinite;
+}
+.cm-dot--selected .cm-dot-core {
+  transform: scale(1.4);
+  box-shadow: 0 0 0 1.5px #1a1814, 0 0 0 3px rgba(246, 242, 235, 0.95),
+    0 3px 8px rgba(26, 24, 20, 0.28);
+}
+.cm-dot--featured.cm-dot--selected .cm-dot-core {
+  box-shadow: 0 0 0 1.5px #c8983a, 0 0 0 3px rgba(246, 242, 235, 0.95),
+    0 0 14px rgba(200, 152, 58, 0.6), 0 3px 8px rgba(26, 24, 20, 0.22);
+}
+@keyframes cmDotSelectedPulse {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1.75);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(2);
+  }
+}
+
+/* ── Hover label / tooltip ─────────────────────────────────── */
+.cm-tooltip {
+  background: #1a1814 !important;
+  color: #f6f2eb !important;
+  border: none !important;
+  box-shadow: 0 10px 28px rgba(26, 24, 20, 0.24), 0 2px 6px rgba(26, 24, 20, 0.12) !important;
+  padding: 7px 11px 8px !important;
+  font-family: "Work Sans", sans-serif !important;
+  font-size: 11.5px !important;
+  line-height: 1.35;
+  border-radius: 5px !important;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  white-space: nowrap;
+  transform-origin: bottom center;
+  animation: cmTipIn 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+/* No tail — clean floating pill, matches the mockup's tooltip. */
+.cm-tooltip::before,
+.cm-tooltip.leaflet-tooltip-top::before,
+.cm-tooltip.leaflet-tooltip-bottom::before,
+.cm-tooltip.leaflet-tooltip-left::before,
+.cm-tooltip.leaflet-tooltip-right::before {
+  display: none !important;
+  border: none !important;
+}
+@keyframes cmTipIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.cm-tooltip .cm-year {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  margin-right: 8px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(246, 242, 235, 0.92);
+  vertical-align: 1px;
+}
+.cm-tooltip .cm-year--featured {
+  background: rgba(200, 152, 58, 0.18);
+  color: #e2be73;
+}
+.cm-tooltip .cm-title {
+  font-weight: 500;
+}
+.cm-tooltip .cm-meta {
+  display: block;
+  margin-top: 3px;
+  font-size: 9.5px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+/* "You are here" marker — pulsing ring + solid dot. */
+.cm-near {
+  background: transparent;
+  border: none;
+}
+.cm-near-pulse {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: #1f5963;
+  opacity: 0.22;
+  animation: cmPulse 1.8s ease-out infinite;
+}
+.cm-near-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #1f5963;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(26, 24, 20, 0.25);
+}
+@keyframes cmPulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.28;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
