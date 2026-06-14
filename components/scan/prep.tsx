@@ -33,6 +33,7 @@ export function ScanPrep() {
   const [rows, setRows] = React.useState<RawEntry[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<Filter>("all");
+  const [hideApproved, setHideApproved] = React.useState(false);
   const [editing, setEditing] = React.useState<RawEntry | null>(null);
   const [runningId, setRunningId] = React.useState<string | null>(null);
   const [batch, setBatch] = React.useState<{ done: number; total: number; phase: string } | null>(null);
@@ -63,7 +64,12 @@ export function ScanPrep() {
     fixed: rows.filter((r) => r.status === "fixed").length,
     approved: rows.filter((r) => r.status === "approved").length,
   };
-  const shown = rows.filter((r) => filter === "all" || r.status === filter);
+  // The explicit "Approved" filter always wins; otherwise the toggle drops approved tiles.
+  const shown = rows.filter(
+    (r) =>
+      (filter === "all" || r.status === filter) &&
+      !(hideApproved && filter !== "approved" && r.status === "approved")
+  );
   const busy = !!batch;
 
   // ── Auto-crop the unprocessed (status "new") raw scans, one at a time with live progress ──
@@ -127,6 +133,13 @@ export function ScanPrep() {
         <FilterTab label="Fixed" count={counts.fixed} active={filter === "fixed"} onClick={() => setFilter("fixed")} tone={t.teal} />
         <FilterTab label="Approved" count={counts.approved} active={filter === "approved"} onClick={() => setFilter("approved")} tone={t.teal} />
 
+        {counts.approved > 0 && filter !== "approved" && (
+          <>
+            <div style={{ width: 1, height: 18, background: t.border, margin: "0 2px" }} />
+            <HideApprovedToggle on={hideApproved} onClick={() => setHideApproved((v) => !v)} t={t} />
+          </>
+        )}
+
         <div style={{ flex: 1 }} />
 
         {stat && !busy && (
@@ -157,7 +170,14 @@ export function ScanPrep() {
         {rows.length === 0 ? (
           <EmptyState t={t} />
         ) : shown.length === 0 ? (
-          <div style={{ padding: "48px 24px", textAlign: "center", color: t.inkFaint, fontSize: 13 }}>No tiles match this filter.</div>
+          <div style={{ padding: "48px 24px", textAlign: "center", color: t.inkFaint, fontSize: 13 }}>
+            {hideApproved && filter === "all" ? (
+              <>
+                All {counts.approved} tile{counts.approved === 1 ? " is" : "s are"} approved and hidden.{" "}
+                <button onClick={() => setHideApproved(false)} style={{ background: "none", border: "none", color: t.teal, cursor: "pointer", font: "inherit", padding: 0, textDecoration: "underline" }}>Show approved</button>
+              </>
+            ) : "No tiles match this filter."}
+          </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(248px, 1fr))", gap: 14 }}>
             {shown.map((r) => (
@@ -262,6 +282,30 @@ function StatusPill({ status, t }: { status: PrepStatus | "new"; t: StaffTokens 
   const m = map[status] || map.new;
   return (
     <span style={{ fontSize: 9.5, color: m.c, background: m.c + "18", padding: "2px 6px", borderRadius: 3, whiteSpace: "nowrap", fontWeight: 500, flexShrink: 0 } as React.CSSProperties}>{m.label}</span>
+  );
+}
+
+function HideApprovedToggle({ on, onClick, t }: { on: boolean; onClick: () => void; t: StaffTokens }) {
+  return (
+    <button onClick={onClick} title={on ? "Show approved tiles" : "Hide approved tiles from the grid"} style={{
+      height: 28, padding: "0 10px", display: "inline-flex", alignItems: "center", gap: 6,
+      background: on ? t.teal + "12" : "#fff", border: `1px solid ${on ? t.teal + "66" : t.border}`,
+      borderRadius: 14, fontSize: 12, color: on ? t.teal : t.inkMuted, cursor: "pointer",
+      fontFamily: "inherit", fontWeight: on ? 500 : 400,
+    }}>
+      <EyeOffIcon color={on ? t.teal : t.inkMuted} />
+      Hide approved
+    </button>
+  );
+}
+
+function EyeOffIcon({ color }: { color: string }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path d="M2 7s2-3.5 5-3.5S12 7 12 7s-2 3.5-5 3.5S2 7 2 7Z" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7" cy="7" r="1.4" stroke={color} strokeWidth="1.2" />
+      <path d="M2.5 1.5 L11.5 12.5" stroke={color} strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
   );
 }
 

@@ -16,8 +16,9 @@ import { pillBtn } from "@/components/staff/ui";
 import { FLAG_LABELS } from "@/components/scan/prep-flags";
 import type { PrepBox, PrepRecord, RawEntry } from "@/lib/types";
 
-const MAX_W = 540;
-const MAX_H = 460;
+const MAX_W = 580;
+const MAX_H = 500;
+const STAGE_PAD = 56; // matte around the scan so rotate/resize handles stay reachable near edges
 const MIN_PX = 16; // smallest crop edge (raw px)
 
 type DragMode = null | { kind: "move" | "rotate" } | { kind: "corner"; i: number };
@@ -59,7 +60,7 @@ export function PrepEditor({
   // client px → raw px
   const toImg = (cx: number, cy: number): [number, number] => {
     const r = stageRef.current!.getBoundingClientRect();
-    return [(cx - r.left) / scale, (cy - r.top) / scale];
+    return [(cx - r.left - STAGE_PAD) / scale, (cy - r.top - STAGE_PAD) / scale];
   };
   const imgSpace = (b: PrepBox, i: number): [number, number] => {
     const [lx, ly] = [CORNERS[i][0] * b.w, CORNERS[i][1] * b.h];
@@ -145,7 +146,7 @@ export function PrepEditor({
     } as React.CSSProperties}>
       <div onClick={(e) => e.stopPropagation()} style={{
         background: t.bgPanel, border: `1px solid ${t.border}`, borderRadius: 12,
-        boxShadow: "0 24px 60px rgba(0,0,0,0.32)", maxWidth: "min(1080px, 100%)", maxHeight: "92vh",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.32)", maxWidth: "min(1200px, 100%)", maxHeight: "92vh",
         display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
         {/* Header */}
@@ -167,10 +168,14 @@ export function PrepEditor({
         <div style={{ display: "flex", gap: 18, padding: 18, overflow: "auto" }}>
           <div>
             <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", color: t.inkFaint, marginBottom: 6 } as React.CSSProperties}>Raw scan</div>
-            <div ref={stageRef} style={{ position: "relative", width: imgW, height: imgH, background: "#1A1814", borderRadius: 4, overflow: "hidden", touchAction: "none", userSelect: "none" } as React.CSSProperties}>
-              {rawSrc && <img src={rawSrc} alt="" draggable={false} style={{ width: imgW, height: imgH, display: "block", pointerEvents: "none" }} />}
-              {/* dim outside the crop via an SVG mask overlay */}
-              <CropOverlay box={box} scale={scale} imgW={imgW} imgH={imgH} t={t} onDownBody={onDown({ kind: "move" })} onDownRotate={onDown({ kind: "rotate" })} onDownCorner={(i) => onDown({ kind: "corner", i })} />
+            <div ref={stageRef} style={{ position: "relative", width: imgW + STAGE_PAD * 2, height: imgH + STAGE_PAD * 2, background: "#1A1814", borderRadius: 4, overflow: "hidden", touchAction: "none", userSelect: "none" } as React.CSSProperties}>
+              {/* The scan is inset by STAGE_PAD; the crop overlay shares that origin, so a handle
+                  that falls just outside the image (the rotate handle, an edge corner) lands on the
+                  matte and stays grabbable instead of being clipped at the image edge. */}
+              <div style={{ position: "absolute", left: STAGE_PAD, top: STAGE_PAD, width: imgW, height: imgH }}>
+                {rawSrc && <img src={rawSrc} alt="" draggable={false} style={{ width: imgW, height: imgH, display: "block", pointerEvents: "none" }} />}
+                <CropOverlay box={box} scale={scale} imgW={imgW} imgH={imgH} t={t} onDownBody={onDown({ kind: "move" })} onDownRotate={onDown({ kind: "rotate" })} onDownCorner={(i) => onDown({ kind: "corner", i })} />
+              </div>
             </div>
           </div>
           <div>

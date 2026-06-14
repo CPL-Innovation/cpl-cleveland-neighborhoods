@@ -10,9 +10,14 @@ one JSON request on argv[1] (or stdin), one JSON response on stdout.
 Why texture, not brightness: a pale sky in the photo is as bright as the white paper
 border, so a brightness threshold can't tell them apart. The emulsion is *grainy*
 (high local variance); the paper border and bed are smooth (low variance). We mask on
-local std-dev, solidify with a morphological close, then take the single largest
-connected component as the photo — which drops isolated margin ink (a loose "330"
-written below the print) for free, since it's a separate small blob.
+local std-dev at a *fraction* of the Otsu texture cut — low enough that a mostly-smooth
+photo's faint grain and the print's thin outer edge still register — solidify with a
+morphological close, then take the UNION of every non-speck textured component as the
+photo. Unioning (rather than the single largest component) keeps a snow / blown-sky
+scene whole instead of cropping to whichever crisp blob has the most pixels — a painted
+address placard, a date card. An isolated margin scribble (a loose "330" below the
+print) is still dropped, since it's a small blob below the area floor across the smooth
+paper border.
 
 Modes (request.mode):
   auto    detect the crop box from texture; render raw + cropped previews.
@@ -46,10 +51,12 @@ except Exception:  # pragma: no cover
 DET_MAX_SIDE = 1400        # detection runs on a downscale this big (speed; texture survives)
 PREVIEW_MAX_SIDE = 820     # contact-sheet/editor preview JPEGs
 VAR_WIN_FRAC = 0.012       # local-variance window ≈ 1.2% of the short side
+DETECT_THR_FRAC = 0.30     # texture cut as a fraction of Otsu (low, so faint grain + print edge register)
+MIN_COMP_FRAC = 0.001      # ignore textured blobs smaller than 0.1% of frame (specks / dust)
 LARGE_ANGLE_DEG = 3.5      # |skew| beyond this → flag for a human look
 EXTREME_AR = 2.45          # rect aspect beyond this → flag (prints are ~1:1..7:5)
-MULTI_COMP_FRAC = 0.10     # 2nd component ≥ 10% of the largest → margin ink / split → flag
-WEAK_AREA_FRAC = 0.06      # largest blob smaller than this fraction of frame → detection weak
+SPARSE_FILL_FRAC = 0.12    # union fills <12% of its own bbox → a stray mark stretched it → flag
+WEAK_AREA_FRAC = 0.06      # textured fraction below this → detection weak
 CLIP_TOP_RATIO = 1.25      # top margin this much larger than the others → dropped sky → flag
 
 
@@ -120,19 +127,24 @@ def detect(gray8_full, threshold_mult):
     std = local_std(small, win)
     std_norm = cv2.normalize(std, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-    # Otsu picks the texture/smooth split; the multiplier lets a human go looser/tighter.
+    # Otsu finds the texture/smooth split; we cut at a FRACTION of it (the multiplier lets a
+    # human go looser/tighter on top). A full Otsu cut keeps only the strongest marks — on a
+    # snow/sky scene that's a painted address placard, not the photo — and the print's faint
+    # outer edge + a smooth photo's low grain both sit below it. The lower cut lets them
+    # register while the truly smooth paper border / scanner bed stay out.
     otsu_t, _ = cv2.threshold(std_norm, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thr = max(1.0, min(254.0, otsu_t * float(threshold_mult)))
+    thr = max(1.0, min(254.0, otsu_t * DETECT_THR_FRAC * float(threshold_mult)))
     mask = (std_norm > thr).astype(np.uint8) * 255
 
-    # Solidify the grainy emulsion into one blob; drop tiny specks.
+    # Solidify nearby texture into blobs (close). Deliberately NO open(): an open() erases
+    # the thin print-edge rectangle, which is the cue that bounds a low-texture photo to its
+    # full extent. Specks are dropped below by a per-component area floor instead.
     k = max(3, int(round(min(sh, sw) * 0.02)) | 1)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,
-                            cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (max(3, k // 2) | 1,) * 2))
 
     n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    frame_area = float(sh * sw)
     flags = []
     if n <= 1:
         # Nothing textured found — fall back to a safe inset and flag it.
@@ -140,17 +152,17 @@ def detect(gray8_full, threshold_mult):
         box = {"cx": W / 2, "cy": H / 2, "w": W * (1 - 2 * inset), "h": H * (1 - 2 * inset), "angle": 0.0}
         return box, ["detect_weak"], {"area_frac": 0.0, "n_components": 0}
 
-    areas = stats[1:, cv2.CC_STAT_AREA]
-    order = np.argsort(areas)[::-1]
-    largest = order[0] + 1
-    largest_area = float(areas[order[0]])
-    frame_area = float(sh * sw)
-    area_frac = largest_area / frame_area
-    second_frac = float(areas[order[1]]) / largest_area if len(order) > 1 else 0.0
-
-    # minAreaRect on the largest component's pixels (NOT a global ink mask — that would
-    # wrongly re-include margin writing, which lives in its own small component).
-    ys, xs = np.where(labels == largest)
+    # The emulsion is the UNION of every non-speck textured component — NOT the single
+    # largest. Largest-component selection cropped to whichever blob had the most pixels,
+    # which on a mostly-smooth photo is a crisp placard, not the picture. Unioning recovers
+    # the whole print (scattered content + the faint edge rectangle); an isolated margin
+    # scribble stays out via the area floor. minAreaRect over the union → crop box + skew.
+    keep = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] >= MIN_COMP_FRAC * frame_area]
+    if not keep:
+        keep = [1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))]
+    sel = np.isin(labels, keep)
+    union_area = float(sel.sum())
+    ys, xs = np.where(sel)
     pts = np.column_stack([xs, ys]).astype(np.float32)
     (cx, cy), (rw, rh), angle = cv2.minAreaRect(pts)
 
@@ -165,6 +177,7 @@ def detect(gray8_full, threshold_mult):
 
     inv = 1.0 / scale
     box = {"cx": cx * inv, "cy": cy * inv, "w": rw * inv, "h": rh * inv, "angle": float(angle)}
+    area_frac = union_area / frame_area
 
     # ── flags (be aggressive; a flag costs a glance, a silent mis-crop costs the photo) ──
     pts_box = cv2.boxPoints(((cx, cy), (rw, rh), angle))
@@ -173,10 +186,10 @@ def detect(gray8_full, threshold_mult):
     m_top, m_bot, m_left, m_right = miny, sh - maxy, minx, sw - maxx
     med_other = sorted([m_bot, m_left, m_right])[1]
     # Known failure: a blown-out sky at the top of the photo reads as smooth "paper" and
-    # gets dropped from the textured blob, so the top margin balloons relative to the other
-    # three. Brightness alone can't tell dropped-sky from a real top border (both smooth +
-    # bright), so the *asymmetry* is the signal — gated by a bright-smooth band right above
-    # the blob's top edge to confirm something bright was left behind. Flag aggressively.
+    # gets dropped from the textured region, so the top margin balloons relative to the
+    # other three. Brightness alone can't tell dropped-sky from a real top border (both
+    # smooth + bright), so the *asymmetry* is the signal — gated by a bright-smooth band
+    # right above the rect's top edge to confirm something bright was left behind.
     if m_top > CLIP_TOP_RATIO * max(med_other, 1.0) and (m_top / sh) > 0.03:
         bw = maxx - minx
         band_h = int(max(6, min(0.12 * (maxy - miny), miny)))
@@ -191,12 +204,13 @@ def detect(gray8_full, threshold_mult):
         flags.append("extreme_aspect")
     if abs(angle) > LARGE_ANGLE_DEG:
         flags.append("large_angle")
-    if second_frac > MULTI_COMP_FRAC:
-        flags.append("multi_component")
-    if area_frac < WEAK_AREA_FRAC:
+    # A rect that its own texture barely fills was likely stretched by a far stray mark
+    # (or detection is too thin to trust) — flag for a human look.
+    fill = union_area / max(1.0, rw * rh)
+    if fill < SPARSE_FILL_FRAC or area_frac < WEAK_AREA_FRAC:
         flags.append("detect_weak")
 
-    return box, flags, {"area_frac": round(area_frac, 4), "n_components": int(n - 1)}
+    return box, flags, {"area_frac": round(area_frac, 4), "fill": round(fill, 3), "n_components": int(n - 1)}
 
 
 # ── crop + deskew ───────────────────────────────────────────────────────────────
