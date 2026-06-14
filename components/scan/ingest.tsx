@@ -188,7 +188,7 @@ export function ScanInbox({
 
         {/* Footer */}
         <div style={{ padding: "10px 20px", borderTop: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", gap: 10, fontSize: 11.5, color: t.inkFaint }}>
-          <span>Ingest derives a JPEG and runs the VLM locally — large TIFFs take a few seconds each.</span>
+          <span>Ingest derives a JPEG locally (sharp), then reads it with Gemini Flash — large TIFFs take a few seconds each.</span>
           <div style={{ flex: 1 }} />
           {!running && <span style={{ fontFamily: t.mono, fontSize: 10.5 }}><Kbd>Esc</Kbd> close</span>}
         </div>
