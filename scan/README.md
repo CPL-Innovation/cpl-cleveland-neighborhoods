@@ -12,7 +12,7 @@ whole-pass feature are deliberately **out of scope**.
 > `server.mjs` path is gone — review data lives in Postgres, and the staff app *is* the server.
 
 ```
-masters/<CHC_ID>.tif            (you drop these in — gitignored)
+scans/masters/<CHC_ID>.tif      (drop box-scans here, or let the Prep stage write them — gitignored)
    │  scan/derive.ts   sharp: source→300dpi (by DPI), q85, sRGB, bake rotation
    ▼
 public/derivatives/<CHC_ID>.jpg (the JPEG the VLM + UI use; lib/storage.ts owns the write)
@@ -50,12 +50,12 @@ npm run scan:accuracy                 # print the rollup + write data/scan/accur
 ```
 
 - **UI-driven ingest** — in the staff app, **Ingest → Scan pipeline → Ingest ↓** opens the
-  **Scan inbox**: it lists `masters/`, flags new vs. already-ingested, and ingests selected
+  **Scan inbox**: it lists `scans/masters/`, flags new vs. already-ingested, and ingests selected
   photos one at a time with live progress (same `derive → store → VLM → upsert` core as the CLI,
   in `lib/scan-ingest.ts`). **Local-only** — `sharp` derivation never runs in serverless, so the
   ingest API refuses on a deploy; use `scan:run` from a local checkout there.
 - **Un-ingest** — select rows in the pipeline sheet → **Remove from pipeline** deletes the
-  `scan_review` row and the derived JPEG. The master TIFF in `masters/` is untouched, so the
+  `scan_review` row and the derived JPEG. The master TIFF in `scans/masters/` is untouched, so the
   photo reappears as `new` in the inbox and can be re-ingested.
 
 Re-running is resumable: a master whose record is already `ready` is skipped (use `--force` to redo).

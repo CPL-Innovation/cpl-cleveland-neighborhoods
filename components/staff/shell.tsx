@@ -96,6 +96,7 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
 
         {/* Ingest — new records entering the system, awaiting first-pass treatment. */}
         <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Ingest</div>
+        <SidebarItem active={activeSection === "prep"} glyph={<PrepGlyph />} label="Prep" hint="crop · deskew" onClick={() => nav.navigate("scanPrep")} />
         <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Scan pipeline" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
         <SidebarItem subtle label="Sync inbox" hint="ContentDM" onClick={() => nav.toast("Sync inbox — existing ContentDM upstream path (not built in this MVP)", "info")} />
 
@@ -215,3 +216,4 @@ function StoriesGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M
 function ContribGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.5 4 L7 7 L11.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" /><rect x="2" y="3" width="10" height="8" rx="0.8" stroke="currentColor" strokeWidth="1.3" /></svg>; }
 function VocabGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.5 3 H11.5 M2.5 7 H11.5 M2.5 11 H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>; }
 function IngestGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M7 2 V8 M4.5 5.5 L7 8 L9.5 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /><path d="M2.5 9.5 V11.5 H11.5 V9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
+function PrepGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M4.5 1.5 V9.5 H12.5 M1.5 4.5 H9.5 V12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }

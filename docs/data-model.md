@@ -32,6 +32,19 @@ into the `enrichment` JSONB and (future) graduated to a `photo_enrichment` row. 
 (`DELETE /api/scan/records/[chcId]`, `lib/scan-store.ts` `deleteRecord`) drops the row and its
 derived JPEG; the master TIFF stays, so the photo can be re-ingested.
 
+### `scan_prep` — the per-photo Prep (crop & deskew) state
+One row per raw flatbed scan, keyed by `chc_id`, **upstream** of `scan_review`. Holds the
+crop box the OpenCV engine detected (or a human hand-fixed), the engine flags, preview paths,
+and the prep status. JSONB columns (`box`, `flags`) are typed via `lib/types.ts`; see
+`drizzle/schema.ts` for columns and [`technical/prep-surface.md`](../technical/prep-surface.md)
+for the design rationale (texture-based detection, the dropped-sky flag, etc.).
+
+Status lifecycle: `pending → auto_ok | flagged → (fixed) → approved`. On **approve**
+(`POST /api/scan/prep/[chcId]` `{action:"apply"}`, `lib/prep-engine.ts` `applyOne`), the engine
+writes the lossless `scans/masters/<chc>.tif` — and **that file is the only handoff to the rest
+of the pipeline**. Nothing downstream (`scan_review`, Run, Review) reads `scan_prep`; the two
+domains meet only at `scans/masters/`.
+
 ### `photo_enrichment` — 1:1 enrichment record
 The canonical enrichment row for a photo (ContentDM-keyed, or `chc_id` for box-scans). Full
 field list in `drizzle/schema.ts`; rationale per field in

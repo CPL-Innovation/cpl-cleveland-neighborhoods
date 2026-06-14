@@ -47,6 +47,60 @@ export interface DeriveMeta {
   outDpi?: number;
 }
 
+// ── Prep stage (crop & deskew) — turns raw/ flatbed scans into clean masters/ ──
+// A separate working domain from scan_review: Prep's only output is masters/<CHC>.tif,
+// which is the boundary the downstream Run stage already assumes.
+export type PrepStatus = "pending" | "auto_ok" | "flagged" | "fixed" | "approved";
+
+// Engine flag keys (kept as strings so adding heuristics needs no schema change):
+//   clip_top · large_angle · extreme_aspect · multi_component · detect_weak
+export type PrepFlag = string;
+
+// The crop box in RAW full-resolution pixels — center, size, skew angle (deg).
+// deskew rotates by -angle. The frontend editor maps these to screen with one uniform scale.
+export interface PrepBox {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  angle: number;
+}
+
+export interface PrepRecord {
+  chc_id: string;
+  raw_path: string | null; // raw/<CHC>.tif (the input flatbed scan)
+  status: PrepStatus;
+  box: PrepBox | null;
+  flags: PrepFlag[];
+  raw_w: number | null;
+  raw_h: number | null;
+  raw_preview: string | null; // /prep/<CHC>.raw.jpg (served off public/)
+  crop_preview: string | null; // /prep/<CHC>.crop.jpg
+  threshold_mult: number;
+  area_frac: number | null;
+  ms: number | null; // last engine wall-clock (ms) — feeds the throughput stat
+  master_path: string | null; // masters/<CHC>.tif once approved + written
+  error: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// raw/ folder listing cross-referenced with prep state (mirrors MasterEntry's shape).
+// Carries enough of the prep row that the contact-sheet grid AND the crop editor share one
+// list call: previews for the tiles, box + raw dimensions for the editor's overlay.
+export interface RawEntry {
+  file: string;
+  chc_id: string;
+  size: number;
+  status: PrepStatus | "new"; // "new" when no prep row exists yet
+  flags: PrepFlag[];
+  raw_preview: string | null;
+  crop_preview: string | null;
+  box: PrepBox | null;
+  raw_w: number | null;
+  raw_h: number | null;
+}
+
 // What the `accept` path writes — photo_enrichment-shaped (a subset for this slice).
 export interface EnrichmentDraft {
   patron_caption: string | null;

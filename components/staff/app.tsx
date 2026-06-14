@@ -12,6 +12,7 @@ import { StaffHome } from "@/components/staff/home";
 import { StaffPhotosList } from "@/components/staff/photos-list";
 import { StaffRecordEdit } from "@/components/staff/record-edit";
 import { StaffStoryAuthor } from "@/components/staff/story-author";
+import { ScanPrep } from "@/components/scan/prep";
 import { ScanPipeline } from "@/components/scan/pipeline";
 import { ScanReview } from "@/components/scan/review";
 import { ScanAccuracy } from "@/components/scan/accuracy";
@@ -24,6 +25,7 @@ const VIEWS: Record<string, { section: string; title: string; meta: string }> = 
   story: { section: "stories", title: "", meta: "DRAFT · CO-AUTHORED" },
   contrib: { section: "contrib", title: "Contributions", meta: "8 PENDING · PATRON" },
   vocab: { section: "vocab", title: "Vocabularies", meta: "6 LISTS" },
+  scanPrep: { section: "prep", title: "Prep", meta: "INGEST · CROP & DESKEW" },
   scanPipeline: { section: "ingest", title: "Scan pipeline", meta: "INGEST · BOX-SCAN" },
   scanReview: { section: "ingest", title: "Review & interpret", meta: "INGEST · SCAN REVIEW" },
   scanAccuracy: { section: "ingest", title: "Accuracy", meta: "INGEST · EVAL" },
@@ -123,6 +125,7 @@ export function StaffApp() {
         {view === "story" && <StaffStoryAuthor />}
         {view === "contrib" && <StubView title="Contributions queue" body="Patron-suggested fixes land here. Triage UI not built in this MVP." />}
         {view === "vocab" && <StubView title="Vocabularies" body="Controlled lists for neighborhoods, themes, places. Not built in this MVP." />}
+        {view === "scanPrep" && <ScanPrep />}
         {view === "scanPipeline" && <ScanPipeline />}
         {view === "scanReview" && <ScanReview />}
         {view === "scanAccuracy" && <ScanAccuracy />}

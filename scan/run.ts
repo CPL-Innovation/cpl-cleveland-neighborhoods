@@ -14,7 +14,7 @@ import { hasLiveKey, MODEL } from "@/lib/vlm-extract";
 
 const { values: ARGV } = parseArgs({
   options: {
-    in: { type: "string", default: "masters" },
+    in: { type: "string", default: "scans/masters" },
     only: { type: "string" },
     force: { type: "boolean", default: false },
   },

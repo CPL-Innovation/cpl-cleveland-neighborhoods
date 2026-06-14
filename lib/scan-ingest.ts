@@ -14,7 +14,8 @@ import { vlmExtract } from "@/lib/vlm-extract";
 import type { ScanRecord } from "@/lib/types";
 
 // Folder of original box-scan TIFFs (overridable; default matches the CLI's --in default).
-export const MASTERS_DIR = process.env.SCAN_MASTERS_DIR || "masters";
+// Lives under scans/ alongside the Prep input (scans/raw/) — both are large, local-only inputs.
+export const MASTERS_DIR = process.env.SCAN_MASTERS_DIR || "scans/masters";
 
 // Absolute masters/ path from the process root. process.cwd() is the project root under both
 // `next dev` and the `tsx` CLI — reliable where derive.ts's import.meta-based REPO_ROOT is not
