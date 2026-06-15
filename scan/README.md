@@ -61,6 +61,34 @@ npm run scan:accuracy                 # print the rollup + write data/scan/accur
 
 Re-running is resumable: a master whose record is already `ready` is skipped (use `--force` to redo).
 
+## Tier 1.5 — facet discovery (offline analysis, not the pipeline)
+
+A **separate, one-off** instrument from the Tier 1 pipeline above — it does not touch `scan_review`,
+`photo_enrichment`, or the UI. `scan/facet-discovery.ts` re-reads the existing
+`public/derivatives/` JPEGs and runs a second, inventory-only VLM call (`vlmFacet` in
+[`../lib/vlm-facet.ts`](../lib/vlm-facet.ts), sibling to `vlmExtract`) that returns only a
+`visible_inventory` — a dense, visible-only set of attributes grouped by candidate axis (structures,
+materials, archival_markup, …). Design intent: `build/enrichment-app/vlm-facet-spec.md` (design vault).
+
+It is a **three-way cross-check** across three strong frontier VLMs — Gemini 3.1 Pro, Claude Opus 4.8,
+GPT-5 — so the per-axis agreement signal (all three agree → lock the facet; two agree → soft; all
+split → model-dependent) tells us which facets are *reliable*, not just present. Each arm uses its
+provider's native structured-output mode (container enforced, values free; never free-parse).
+
+```
+npm run scan:facets                       # every keyed arm, all derivatives → one JSON per model
+npm run scan:facets -- --provider opus     # one arm only (gemini | opus | gpt5)
+npm run scan:facets -- --only CHC019059    # one photo (smoke test)
+npm run scan:facets -- --limit 5           # first N (cheap dry run)
+```
+
+Output: `data/scan/facets-discovery-{gemini,opus,gpt5}.json`, keyed by CHC ID, identical shape,
+diffable key-by-key (gitignored — analysis artifact, consumed offline). Arms without a key run in
+STUB mode and are skipped from the real signal. **No re-review** — raw output, mistakes included.
+
+This is **Run 1 (discovery)** only; the enforced-facet A/B (Run 2) is gated until discovery yields a
+schema. See the [Facet engine knobs](#knobs) below for the per-arm model/key env vars.
+
 ## The review surface
 
 Run `npm run dev` and open **`/staff` → Scan pipeline → Ingest**. The Ingest surface is a worklist
@@ -80,6 +108,10 @@ row, or **Start review**, to judge each photo. Verdicts **auto-save** to Postgre
 - `lib/vlm-extract.ts`: `GEMINI_MODEL` env (default `gemini-3-flash-preview`), `MAX_ATTEMPTS` (3), `TIMEOUT_MS`.
 - `lib/storage.ts`: `STORAGE_BACKEND=local|supabase` (else auto), `SUPABASE_DERIVATIVES_BUCKET`.
 - `scan/env.mjs` loads `.env.local` / `.env` for the CLI (`DATABASE_URL`, `SUPABASE_*`, `GEMINI_API_KEY`).
+- `lib/vlm-facet.ts` (Tier 1.5): per-arm model overrides `FACET_MODEL_GEMINI` (default
+  `gemini-3.1-pro-preview`), `FACET_MODEL_OPUS` (default `claude-opus-4-8`), `FACET_MODEL_GPT5`
+  (default `gpt-5`); keys `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`. A missing key →
+  that arm runs in STUB mode.
 
 ## Swapping the VLM engine
 

@@ -14,13 +14,16 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "scan:run": "tsx scan/run.ts",
-    "scan:accuracy": "tsx scan/accuracy.ts"
+    "scan:accuracy": "tsx scan/accuracy.ts",
+    "scan:facets": "tsx scan/facet-discovery.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@supabase/supabase-js": "^2.45.4",
     "drizzle-orm": "^0.33.0",
     "leaflet": "^1.9.4",
     "next": "^14.2.13",
+    "openai": "^6.42.0",
     "postgres": "^3.4.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

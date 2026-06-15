@@ -34,6 +34,39 @@ export interface VlmResult {
   _stub?: boolean;
 }
 
+// ── Tier 1.5 facet discovery (vlmFacet — sibling to vlmExtract) ──
+// Discovery-run output (build/enrichment-app/vlm-facet-spec.md §"Run 1", v0.3 prompt): a
+// visible-only inventory grouped by candidate axis. The container shape is enforced (these
+// keys, all optional, string-array values) but the string VALUES are free — natural
+// vocabulary surfaces. Categories omitted when nothing is visible (absence is signal).
+// v0.3 split the print-object layer out of `other` into archival_markup (intentional
+// librarian marks — findable signal) + print_condition (physical defects — noise).
+// Analysis artifact only — never written to photo_enrichment / scan_review.
+export interface VisibleInventory {
+  // Scene categories — the depicted world
+  structures?: string[];
+  materials?: string[];
+  street_and_ground?: string[];
+  transport?: string[];
+  people_and_activity?: string[];
+  text_in_scene?: string[];
+  vegetation?: string[];
+  condition_and_change?: string[];
+  // Print-object categories — marks/defects ON the print, not in the scene
+  archival_markup?: string[];
+  print_condition?: string[];
+  // Catch-all
+  other?: string[];
+}
+
+export interface FacetResult {
+  visible_inventory: VisibleInventory;
+  _stub?: boolean;
+}
+
+// The three discovery arms for the v0.3 cross-check (vlm-facet-spec §"Build brief — v0.3").
+export type FacetProvider = "gemini" | "opus" | "gpt5";
+
 export interface DeriveMeta {
   status: "ok" | "failed";
   reason?: string;

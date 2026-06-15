@@ -34,7 +34,8 @@ VLM-reads masters into records, Review captures verdicts (with an Accuracy eval 
 - Drizzle ORM + `postgres` driver → **Postgres** (local in dev · Supabase when deployed; switched by `DATABASE_URL`)
 - Derived JPEG store: **local disk** (`public/derivatives/`) in dev · **Supabase Storage** when deployed — pluggable in `lib/storage.ts`
 - `sharp` for TIFF→JPEG derivation (**local CLI only**, never serverless)
-- Gemini (`gemini-3-flash-preview`) for the VLM read, behind `lib/vlm-extract.ts`
+- Gemini (`gemini-3-flash-preview`) for the Tier 1 VLM read, behind `lib/vlm-extract.ts`
+- **Tier 1.5 facet discovery** (`lib/vlm-facet.ts`, sibling to `vlm-extract`): a one-off offline 3-way cross-check across **Gemini 3.1 Pro** (raw v1beta REST) · **Claude Opus 4.8** (`@anthropic-ai/sdk`) · **GPT-5** (`openai` SDK). Each arm's native structured-output mode; never writes the DB/UI. Driven by `scan/facet-discovery.ts` (`npm run scan:facets`).
 - **OpenCV** (`python3` + `cv2`/`numpy`) for the Prep crop/deskew engine, run as a **local subprocess** (`scan/crop_engine.py`), behind `lib/prep-engine.ts`
 - **Leaflet** (npm) + CARTO Positron tiles for the patron map, used imperatively in `components/patron/cleveland-map.tsx` (client-only via `next/dynamic`)
 
@@ -76,6 +77,7 @@ The scan CLI + drizzle-kit load env via `scan/env.mjs`; Next loads `.env.local` 
 | `npm run db:generate` / `db:migrate` / `db:push` | Drizzle migrations / push schema |
 | `npm run scan:run [-- --only CHC123] [-- --force]` | Local batch: derive → JPEG store → VLM → DB |
 | `npm run scan:accuracy` | Print the accuracy rollup + write `data/scan/accuracy.csv` |
+| `npm run scan:facets [-- --provider opus] [-- --only CHC123]` | **Tier 1.5 facet discovery** (offline, one-off): re-read derivatives → `vlmFacet` 3-way (Gemini/Opus/GPT-5) → `data/scan/facets-discovery-{gemini,opus,gpt5}.json`. Never touches the DB/UI. |
 
 ## Layout
 
@@ -98,10 +100,12 @@ components/
                             accuracy (C), ingest (Scan-inbox modal)
 lib/                      → db, scan-store, accuracy, vlm-extract, storage, scan-api,
                             scan-ingest (shared derive→store→VLM→DB core),
+                            vlm-facet (Tier 1.5 facet discovery — 3-way sibling to vlm-extract),
                             prep-engine (drives crop_engine.py) + prep-store + prep-api,
                             tokens, types, normalize-address
 drizzle/                  → schema.ts (source of truth for the DB), migrations/
 scan/                     → run.ts / derive.ts / accuracy.ts (tsx CLI) + env.mjs +
+                            facet-discovery.ts (Tier 1.5 3-way discovery CLI, offline) +
                             crop_engine.py (OpenCV crop/deskew, subprocess)
 harvest/                  → ContentDM harvest pipeline (Tier 1→2→3, unchanged)
 data/ , public/data/      → harvested ContentDM JSON (read-only; patron + staff read this)
