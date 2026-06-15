@@ -98,6 +98,7 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
         <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Scan pipeline</div>
         <SidebarItem active={activeSection === "prep"} glyph={<PrepGlyph />} label="Prep" hint="crop · deskew" onClick={() => nav.navigate("scanPrep")} />
         <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Ingest" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
+        <SidebarItem active={activeSection === "facets"} glyph={<FacetsGlyph />} label="Facet review" hint="Tier 1.5 · A/B" onClick={() => nav.navigate("scanFacets")} />
         <SidebarItem subtle label="Sync inbox" hint="ContentDM" onClick={() => nav.toast("Sync inbox — existing ContentDM upstream path (not built in this MVP)", "info")} />
 
         <div style={{ flex: 1 }} />
@@ -217,3 +218,4 @@ function ContribGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M
 function VocabGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.5 3 H11.5 M2.5 7 H11.5 M2.5 11 H8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>; }
 function IngestGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M7 2 V8 M4.5 5.5 L7 8 L9.5 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /><path d="M2.5 9.5 V11.5 H11.5 V9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
 function PrepGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M4.5 1.5 V9.5 H12.5 M1.5 4.5 H9.5 V12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
+function FacetsGlyph() { return <svg viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="2" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="2" y="7.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /></svg>; }

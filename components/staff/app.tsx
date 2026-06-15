@@ -16,6 +16,7 @@ import { ScanPrep } from "@/components/scan/prep";
 import { ScanPipeline } from "@/components/scan/pipeline";
 import { ScanReview } from "@/components/scan/review";
 import { ScanAccuracy } from "@/components/scan/accuracy";
+import { ScanFacetReview } from "@/components/scan/facet-review";
 
 const VIEWS: Record<string, { section: string; title: string; meta: string }> = {
   home: { section: "home", title: "Home", meta: "WELCOME · BRIAN MEGGITT" },
@@ -29,6 +30,7 @@ const VIEWS: Record<string, { section: string; title: string; meta: string }> = 
   scanPipeline: { section: "ingest", title: "Ingest", meta: "SCAN PIPELINE · BOX-SCAN" },
   scanReview: { section: "ingest", title: "Review & interpret", meta: "SCAN PIPELINE · SCAN REVIEW" },
   scanAccuracy: { section: "ingest", title: "Accuracy", meta: "SCAN PIPELINE · EVAL" },
+  scanFacets: { section: "facets", title: "Facet review", meta: "SCAN PIPELINE · TIER 1.5 A/B" },
 };
 
 interface Toast { id: string; text: string; tone: ToastTone }
@@ -129,6 +131,7 @@ export function StaffApp() {
         {view === "scanPipeline" && <ScanPipeline />}
         {view === "scanReview" && <ScanReview />}
         {view === "scanAccuracy" && <ScanAccuracy />}
+        {view === "scanFacets" && <ScanFacetReview />}
       </StaffShell>
       <Toaster toasts={toasts} />
     </NavContext.Provider>

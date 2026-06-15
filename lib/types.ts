@@ -67,6 +67,88 @@ export interface FacetResult {
 // The three discovery arms for the v0.3 cross-check (vlm-facet-spec §"Build brief — v0.3").
 export type FacetProvider = "gemini" | "opus" | "gpt5";
 
+// ── Tier 1.5 Run 2 — the enforced v1 LOCKED facet schema (vlm-facet-spec §"Run 2 — the
+// enforced schema"). Discovery froze the container + freed the values; Run 2 ALSO constrains
+// the values to closed enums. Every field is optional — "omit when not visible" is enforced by
+// the no-fabrication guard, and an empty/omitted field is the correct answer when evidence is
+// absent. soft-confidence fields (building_type, roof_form) carry a *_confidence sibling.
+// Eval artifact only — never written to photo_enrichment / scan_review until the A/B clears.
+export type FacetConfidence = "high" | "medium" | "low";
+export type BuildingType =
+  | "single_family"
+  | "multi_family"
+  | "commercial"
+  | "civic"
+  | "accessory_only"
+  | "mixed";
+export type Stories = "1" | "1.5" | "2" | "2.5" | "3plus" | "unknown";
+export type RoofForm = "gable" | "hip" | "flat" | "gambrel" | "mansard" | "dormer";
+export type AccessoryStructure = "detached_garage" | "shed" | "fence" | "chimney" | "outbuilding";
+export type Material = "wood_frame" | "brick" | "stone" | "concrete_block" | "stucco" | "metal" | "glass";
+export type StreetGround =
+  | "paved_street"
+  | "sidewalk"
+  | "curb"
+  | "driveway"
+  | "dirt_unpaved"
+  | "brick_street"
+  | "snow_cover"
+  | "open_lot";
+export type TransportFeature =
+  | "utility_poles"
+  | "overhead_wires"
+  | "parked_cars"
+  | "street_lights"
+  | "street_signs"
+  | "streetcar_tracks";
+export type Vegetation = "trees" | "grass_lawn" | "shrubs" | "weeds_overgrown" | "bare_trees";
+export type SceneTextKind = "business_name" | "street_sign" | "poster" | "address" | "other";
+export type ArchivalMarkupKind = "date_stamp" | "catalog_code" | "ink_annotation" | "drawn_mark";
+// CHANGE-ONLY: fires on visible evidence of transition; empty array = stable/intact default.
+// NEVER includes an empty/vacant lot (that is a ground fact → street_and_ground: open_lot).
+export type ConditionChange =
+  | "boarded_shuttered"
+  | "demolition_rubble"
+  | "under_construction"
+  | "fire_damage"
+  | "deteriorating"
+  | "cracked_pavement";
+export type PersonPresent = "people" | "children" | "workers" | "vendors" | "animals";
+
+export interface SceneTextItem {
+  text: string;
+  kind: SceneTextKind;
+}
+export interface ArchivalMarkupItem {
+  text: string;
+  kind: ArchivalMarkupKind;
+}
+
+export interface Run2Facets {
+  // BUILDING (decomposed from raw `structures`)
+  building_type?: BuildingType;
+  building_type_confidence?: FacetConfidence; // soft-confidence sibling
+  stories?: Stories;
+  roof_form?: RoofForm[];
+  roof_form_confidence?: FacetConfidence; // soft-confidence sibling
+  has_porch?: boolean;
+  accessory_structures?: AccessoryStructure[];
+  // ENVIRONMENT (multi-select set-membership, unordered)
+  materials?: Material[];
+  street_and_ground?: StreetGround[];
+  transport?: TransportFeature[];
+  vegetation?: Vegetation[];
+  // FREE-TEXT transcription arrays (light kind enum)
+  scene_text?: SceneTextItem[];
+  archival_markup?: ArchivalMarkupItem[];
+  // CHANGE-ONLY enum
+  condition_and_change?: ConditionChange[];
+  // DEMOTED
+  has_print_damage?: boolean;
+  people_present?: PersonPresent[];
+  _stub?: boolean;
+}
+
 export interface DeriveMeta {
   status: "ok" | "failed";
   reason?: string;

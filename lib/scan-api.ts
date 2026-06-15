@@ -2,6 +2,7 @@
 // scan-pipeline.jsx). Used by the staff/scan client components.
 import type { ScanRecord, AccuracyRollup } from "@/lib/types";
 import type { MasterEntry, IngestResult } from "@/lib/scan-ingest";
+import type { FacetReviewRow, FacetReviewEntry, FacetReviewPatch } from "@/lib/facet-review-store";
 
 export const scanApi = {
   async list(): Promise<ScanRecord[]> {
@@ -60,4 +61,27 @@ export const scanApi = {
     return r.json();
   },
   csvUrl: "/api/scan/accuracy?format=csv",
+
+  // ── Tier 1.5 Run 2 facet review (local-only A/B instrument; staging, never production) ──
+  async facets(): Promise<FacetReviewRow[]> {
+    const r = await fetch("/api/scan/facets");
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `facets ${r.status}`);
+    }
+    const data = await r.json();
+    return data.rows as FacetReviewRow[];
+  },
+  async saveFacet(id: string, patch: FacetReviewPatch): Promise<FacetReviewEntry> {
+    const r = await fetch(`/api/scan/facets/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `save facet ${r.status}`);
+    }
+    return r.json();
+  },
 };

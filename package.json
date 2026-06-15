@@ -15,7 +15,8 @@
     "db:push": "drizzle-kit push",
     "scan:run": "tsx scan/run.ts",
     "scan:accuracy": "tsx scan/accuracy.ts",
-    "scan:facets": "tsx scan/facet-discovery.ts"
+    "scan:facets": "tsx scan/facet-discovery.ts",
+    "scan:run2": "tsx scan/facet-run2.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

@@ -86,8 +86,37 @@ Output: `data/scan/facets-discovery-{gemini,opus,gpt5}.json`, keyed by CHC ID, i
 diffable key-by-key (gitignored — analysis artifact, consumed offline). Arms without a key run in
 STUB mode and are skipped from the real signal. **No re-review** — raw output, mistakes included.
 
-This is **Run 1 (discovery)** only; the enforced-facet A/B (Run 2) is gated until discovery yields a
-schema. See the [Facet engine knobs](#knobs) below for the per-arm model/key env vars.
+### Run 2 — the enforced-schema A/B
+
+Discovery (Run 1) froze the *container* and freed the *values*; **Run 2 also constrains the values
+to closed enums** — the v1 LOCKED schema (`Run2Facets` in [`../lib/types.ts`](../lib/types.ts)).
+Two pieces, in order:
+
+- **Piece A — extraction.** `scan/facet-run2.ts` (`npm run scan:run2`) calls `vlmRun2`
+  ([`../lib/vlm-run2.ts`](../lib/vlm-run2.ts)) — **Gemini 3.1 Pro, single model** (the cross-check
+  is done; Run 2 evaluates the production candidate, not models against each other) — under the
+  enforced enum schema via Gemini's `responseSchema`, with three in-prompt guards (change-only
+  condition, no-fabrication, confidence-honesty). Output `data/scan/facets-run2.json`, keyed by CHC
+  ID. **Resumable** — re-running skips records already in the out file (so a quota-interrupted run
+  finishes without re-billing); `--force` re-extracts. Eval artifact only — no production write.
+
+  ```
+  npm run scan:run2                  enforced extraction over every derivative (resumes)
+  npm run scan:run2 -- --only CHC…    one photo · --limit N · --force · --out <path>
+  ```
+
+- **Piece B — staff facet-review UI + A/B scoring.** `/staff → Scan pipeline → Facet review`
+  ([`../components/scan/facet-review.tsx`](../components/scan/facet-review.tsx)): per-photo image +
+  baseline Tier-1 caption (the "value over the caption" comparison) + the ~16 facet fields as
+  editable widgets (multi-select chips, single-selects, booleans, transcription arrays, confidence
+  on the soft-confidence fields). Reads the eval artifact via `/api/scan/facets`; staff corrections
+  persist to a **staging file** (`data/scan/facets-run2-review.json`) via `lib/facet-review-store.ts`.
+
+> **Production-write firebreak (load-bearing):** the review surface reads the eval artifact and
+> writes corrections to *staging only* — it **never** touches `photo_enrichment` or `scan_review`.
+> Tier 1 is validated/shipped; Tier 1.5 is on trial until the A/B clears. The UI is the A/B
+> *instrument*, not the verdict — the four scoring questions (value-over-caption, fabrication,
+> change-only discipline, the Gemini soft-confidence watch) still gate whether faceting ships.
 
 ## The review surface
 
