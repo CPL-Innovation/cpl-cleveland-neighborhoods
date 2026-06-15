@@ -106,6 +106,28 @@ export function ScanPipeline() {
     }
   };
 
+  // ── Export VLM metadata (year · address · description) for every entry as JSON ──
+  const onExport = () => {
+    if (!records.length) return nav.toast("Nothing to export yet", "info");
+    const entries = records.map((r) => ({
+      chc_id: r.chc_id,
+      year: r.vlm?.year ?? null,
+      address: r.vlm?.address ?? null,
+      description: r.vlm?.description ?? null,
+    }));
+    const payload = { exported_at: new Date().toISOString(), count: entries.length, entries };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scan-metadata-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    nav.toast(`Exported ${entries.length} ${entries.length === 1 ? "entry" : "entries"}`, "ok");
+  };
+
   const startReview = () => {
     const first = records.find((r) => r.status === "ready" && r.review?.status !== "reviewed")
       || records.find((r) => r.status === "ready");
@@ -170,6 +192,7 @@ export function ScanPipeline() {
           </span>
         )}
         <button onClick={() => setInboxOpen(true)} style={pillBtn(t, false)}>Ingest ↓</button>
+        <button onClick={onExport} style={pillBtn(t, false)} title="Download year · address · description for every entry as JSON">Export JSON ↧</button>
         <button onClick={() => nav.navigate("scanAccuracy")} style={pillBtn(t, false)}>Accuracy ▸</button>
         <button onClick={startReview} style={pillBtn(t, true)}>Start review →</button>
       </div>
