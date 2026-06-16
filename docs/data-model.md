@@ -47,11 +47,14 @@ domains meet only at `scans/masters/`.
 
 ### `photo_enrichment` — 1:1 enrichment record
 The canonical enrichment row for a photo (ContentDM-keyed, or `chc_id` for box-scans). Full
-field list in `drizzle/schema.ts`; rationale per field in
-[`technical/enrichment-schema.md`](../technical/enrichment-schema.md). Today it is written only
-by the scan-accept path (`lib/scan-store.ts` → `buildEnrichment`); the record-edit surface does
-not yet write it. Controlled-vocab FKs (neighborhood/themes/branch) are plain text for now —
-vocab tables are deferred.
+field list in `drizzle/schema.ts`; rationale per field in the design vault
+(`build/data-backend/enrichment-schema.md`). Writers today: the scan-accept path
+(`lib/scan-store.ts` → `buildEnrichment`, hooks only) and — newly — the **Tier 1.5 Stage 0
+facet graduation** (`lib/facet-review-store.ts`), which on staff approval writes the `facets`
+JSONB column (the enforced Run 2 `Run2Facets` record) plus `facets_reviewed_at` / `_by` /
+`facets_source` provenance. That write is **scoped to the validated 99** (Stage 0 of the gated
+Tier 1.5 → production rollout); the record-edit surface still does not write this table.
+Controlled-vocab FKs (neighborhood/themes/branch) are plain text for now — vocab tables deferred.
 
 ## Conventions
 - Timestamps `created_at` / `updated_at` (timezone-aware) on both tables.

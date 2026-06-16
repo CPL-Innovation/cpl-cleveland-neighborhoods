@@ -40,12 +40,12 @@ const ROOF_FORM: RoofForm[] = ["gable", "hip", "flat", "gambrel", "mansard", "do
 const CONFIDENCE: FacetConfidence[] = ["high", "medium", "low"];
 const ACCESSORY: AccessoryStructure[] = ["detached_garage", "shed", "fence", "chimney", "outbuilding"];
 const MATERIALS: Material[] = ["wood_frame", "brick", "stone", "concrete_block", "stucco", "metal", "glass"];
-const STREET_GROUND: StreetGround[] = ["paved_street", "sidewalk", "curb", "driveway", "dirt_unpaved", "brick_street", "snow_cover", "open_lot"];
+const STREET_GROUND: StreetGround[] = ["paved_street", "sidewalk", "curb", "driveway", "dirt_unpaved", "brick_street", "snow_cover", "open_lot", "cracked_pavement"];
 const TRANSPORT: TransportFeature[] = ["utility_poles", "overhead_wires", "parked_cars", "street_lights", "street_signs", "streetcar_tracks"];
 const VEGETATION: Vegetation[] = ["trees", "grass_lawn", "shrubs", "weeds_overgrown", "bare_trees"];
 const SCENE_TEXT_KIND: SceneTextKind[] = ["business_name", "street_sign", "poster", "address", "other"];
 const ARCHIVAL_KIND: ArchivalMarkupKind[] = ["date_stamp", "catalog_code", "ink_annotation", "drawn_mark"];
-const CONDITION: ConditionChange[] = ["boarded_shuttered", "demolition_rubble", "under_construction", "fire_damage", "deteriorating", "cracked_pavement"];
+const CONDITION: ConditionChange[] = ["boarded_shuttered", "demolition_rubble", "under_construction", "fire_damage", "deteriorating"];
 const PEOPLE: PersonPresent[] = ["people", "children", "workers", "vendors", "animals"];
 
 // ── Run 2 prompt: enforced-enum extraction with the three guards + the print/scene firebreak ──
@@ -68,8 +68,13 @@ Mandatory rules:
   boarded/shuttered windows, demolition rubble, construction equipment or soil piles,
   fire damage, bare foundation, visible active deterioration. "Intact / occupied" is
   the default and must NEVER be logged. An empty or vacant LOT is a ground fact, not a
-  change — code it as street_and_ground "open_lot", NEVER condition_and_change. Leave
-  condition_and_change empty unless real transition evidence is visible.
+  change — code it as street_and_ground "open_lot", NEVER condition_and_change. Cracked
+  or broken pavement is a ground STATE, not a transition — code it as street_and_ground
+  "cracked_pavement", NEVER condition_and_change. Leave condition_and_change empty unless
+  real transition evidence is visible.
+- MATERIALS ARE WALL CLADDING ONLY. Record a material only where it appears as the wall
+  surface of a building. A chimney, fence, or paving is NOT cladding — a brick chimney on
+  a wood-clad house is "wood_frame" materials + "chimney" accessory_structures, not "brick".
 - SEPARATE THE DEPICTED WORLD FROM THE PRINT. Text that is part of the scene
   (storefront signs, street signs, posters) → scene_text. Marks added by an archivist
   (date stamps, catalog codes, ink annotations, drawn X marks or arrows) →

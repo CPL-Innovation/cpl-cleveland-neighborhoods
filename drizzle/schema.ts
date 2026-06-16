@@ -9,7 +9,7 @@ import {
   date,
 } from "drizzle-orm/pg-core";
 import type {
-  DeriveMeta, EnrichmentDraft, Review, VlmResult, PrepBox, PrepFlag,
+  DeriveMeta, EnrichmentDraft, Review, VlmResult, PrepBox, PrepFlag, Run2Facets,
 } from "@/lib/types";
 
 // Prep stage working record (crop & deskew). Keyed by CHC ID, upstream of scan_review:
@@ -99,6 +99,13 @@ export const photoEnrichment = pgTable("photo_enrichment", {
   // Physical
   physicalLocation: text("physical_location"),
   requestScanEligible: boolean("request_scan_eligible"),
+  // Tier 1.5 visible facets — Stage 0 production write (staff-approved, A/B-cleared via the
+  // facet-review surface). The enforced Run 2 schema (Run2Facets) stored whole as JSONB; the
+  // provenance columns record who graduated it and under which schema/model version.
+  facets: jsonb("facets").$type<Run2Facets>(),
+  facetsReviewedAt: timestamp("facets_reviewed_at", { withTimezone: true }),
+  facetsReviewedBy: text("facets_reviewed_by"),
+  facetsSource: text("facets_source"), // e.g. "tier1.5_run2_gemini-3.1-pro_v0.5"
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

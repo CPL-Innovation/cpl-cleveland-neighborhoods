@@ -112,11 +112,26 @@ Two pieces, in order:
   on the soft-confidence fields). Reads the eval artifact via `/api/scan/facets`; staff corrections
   persist to a **staging file** (`data/scan/facets-run2-review.json`) via `lib/facet-review-store.ts`.
 
-> **Production-write firebreak (load-bearing):** the review surface reads the eval artifact and
-> writes corrections to *staging only* — it **never** touches `photo_enrichment` or `scan_review`.
-> Tier 1 is validated/shipped; Tier 1.5 is on trial until the A/B clears. The UI is the A/B
-> *instrument*, not the verdict — the four scoring questions (value-over-caption, fabrication,
-> change-only discipline, the Gemini soft-confidence watch) still gate whether faceting ships.
+### Stage 0 — graduate the validated 99 to production
+
+**The A/B cleared (v0.5 — all four scoring questions passed).** The firebreak is now **lifting,
+scoped to Stage 0**: the same 99 City Hall-box facets the A/B validated graduate to the production
+`photo_enrichment` store, *behind the staff review surface*. In the Facet review UI, **approving a
+record** (the "approve → production" toggle + Save, i.e. `reviewed: true`) writes its staff-approved
+facets to `photo_enrichment` (`facets` JSONB + `facets_reviewed_at`/`_by`/`facets_source`
+provenance); un-approving clears them. Scoped by construction to the 99 (the only records the eval
+artifact knows about).
+
+Two reviewer-approved **v0.5 schema fixes** applied: `cracked_pavement` moved
+`condition_and_change → street_and_ground` (a ground state, not a transition — change rate settles
+at 12/99); `materials` is wall-cladding-only (a brick chimney on a wood house is `wood_frame` +
+`chimney`, not `brick`).
+
+> **Firebreak status — lifting, scoped (not a flip-the-collection switch).** Stage 0 writes the
+> validated 99 only. **Stage 1** (a new neighborhood batch — the representativeness + Flash-vs-Pro
+> test) and **Stage 2** (bulk) remain **gated** and are *not built*. The discipline shifted from
+> "don't write" to "don't write *ahead of the evidence*." The write path is local-only (it reads
+> the local eval artifact).
 
 ## The review surface
 

@@ -25,10 +25,10 @@ const MULTI: Record<string, string[]> = {
   roof_form: ["gable", "hip", "flat", "gambrel", "mansard", "dormer"],
   accessory_structures: ["detached_garage", "shed", "fence", "chimney", "outbuilding"],
   materials: ["wood_frame", "brick", "stone", "concrete_block", "stucco", "metal", "glass"],
-  street_and_ground: ["paved_street", "sidewalk", "curb", "driveway", "dirt_unpaved", "brick_street", "snow_cover", "open_lot"],
+  street_and_ground: ["paved_street", "sidewalk", "curb", "driveway", "dirt_unpaved", "brick_street", "snow_cover", "open_lot", "cracked_pavement"],
   transport: ["utility_poles", "overhead_wires", "parked_cars", "street_lights", "street_signs", "streetcar_tracks"],
   vegetation: ["trees", "grass_lawn", "shrubs", "weeds_overgrown", "bare_trees"],
-  condition_and_change: ["boarded_shuttered", "demolition_rubble", "under_construction", "fire_damage", "deteriorating", "cracked_pavement"],
+  condition_and_change: ["boarded_shuttered", "demolition_rubble", "under_construction", "fire_damage", "deteriorating"],
   people_present: ["people", "children", "workers", "vendors", "animals"],
 };
 const CONFIDENCE = ["high", "medium", "low"];
@@ -105,13 +105,13 @@ export function ScanFacetReview() {
       setRows((rs) =>
         rs.map((r) =>
           r.chc_id === active.chc_id
-            ? { ...r, corrected: working as Run2Facets, reviewed: willReview, notes }
+            ? { ...r, corrected: working as Run2Facets, reviewed: willReview, notes, graduated: willReview }
             : r
         )
       );
       setReviewed(willReview);
       setDirty(false);
-      nav.toast(willReview ? "Saved · marked reviewed" : "Correction saved (staging)", "ok");
+      nav.toast(willReview ? "Approved → written to production" : "Saved (staging) · not in production", "ok");
     } catch (e) {
       nav.toast((e as Error).message, "warn");
     } finally {
@@ -119,7 +119,7 @@ export function ScanFacetReview() {
     }
   };
 
-  const reviewedCount = rows.filter((r) => r.reviewed).length;
+  const graduatedCount = rows.filter((r) => r.graduated).length;
 
   if (loading) return <Centered t={t}>Loading Run 2 facets…</Centered>;
   if (err)
@@ -141,10 +141,10 @@ export function ScanFacetReview() {
       <div style={{ width: 248, borderRight: `1px solid ${t.border}`, display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div style={{ padding: "12px 14px", borderBottom: `1px solid ${t.borderSoft}` }}>
           <div style={{ fontFamily: t.mono, fontSize: 10, letterSpacing: 1.2, textTransform: "uppercase", color: t.inkMuted }}>
-            Run 2 · A/B review
+            Run 2 · Stage 0 graduation
           </div>
           <div style={{ fontSize: 12.5, color: t.ink, marginTop: 4 }}>
-            {reviewedCount}/{rows.length} reviewed
+            {graduatedCount}/{rows.length} <span style={{ color: t.sage }}>in production</span>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto" }}>
@@ -166,7 +166,9 @@ export function ScanFacetReview() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, color: t.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.chc_id}</div>
                   <div style={{ fontFamily: t.mono, fontSize: 9.5, color: t.inkFaint, display: "flex", gap: 6 }}>
-                    {r.reviewed ? <span style={{ color: t.sage }}>✓ reviewed</span> : <span>pending</span>}
+                    {r.graduated ? <span style={{ color: t.sage }} title="facets written to photo_enrichment">↑ production</span>
+                      : r.reviewed ? <span style={{ color: t.sage }}>✓ reviewed</span>
+                      : <span>pending</span>}
                     {change && <span style={{ color: t.terracotta }} title="condition_and_change fired">⌁ change</span>}
                   </div>
                 </div>
@@ -201,15 +203,17 @@ export function ScanFacetReview() {
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, position: "sticky", top: 0 }}>
                 <div style={{ fontFamily: t.serif, fontSize: 19, color: t.ink }}>{active.chc_id}</div>
                 {dirty && <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.draft }} title="unsaved" />}
+                {active.graduated && !dirty && (
+                  <span style={{ fontFamily: t.mono, fontSize: 10, color: t.sage, background: t.sageSoft, padding: "2px 7px", borderRadius: 3 }} title="written to photo_enrichment">↑ in production</span>
+                )}
                 <div style={{ flex: 1 }} />
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.ink, cursor: "pointer" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: t.ink, cursor: "pointer" }} title="approve = write these facets to the production photo_enrichment store">
                   <input type="checkbox" checked={reviewed} onChange={(e) => { setReviewed(e.target.checked); setDirty(true); }} />
-                  reviewed
+                  approve → production
                 </label>
                 <button onClick={() => save()} disabled={saving || !dirty} style={{ ...pillBtn(t, true), opacity: saving || !dirty ? 0.5 : 1 }}>
                   {saving ? "Saving…" : "Save"}
                 </button>
-                <button onClick={() => save(true)} disabled={saving} style={{ ...pillBtn(t, false) }}>Save + reviewed →</button>
               </div>
 
               <FieldGroup label="Building">
@@ -251,7 +255,7 @@ export function ScanFacetReview() {
               </FieldGroup>
 
               <div style={{ fontSize: 11, color: t.inkFaint, fontStyle: "italic", marginTop: 4, marginBottom: 30 }}>
-                Staging only — corrections are A/B ground truth, never written to the production store until the A/B clears.
+                Stage 0 (A/B cleared): approving writes these facets to the production photo_enrichment store — scoped to the validated 99. New-neighborhood (Stage 1) + bulk (Stage 2) remain gated.
               </div>
             </div>
           </div>

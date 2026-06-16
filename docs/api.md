@@ -23,6 +23,8 @@ All routes run on the Node runtime, `dynamic = "force-dynamic"`, and read/write 
 | `GET /api/scan/accuracy` | Eval rollup | `AccuracyRollup` |
 | `GET /api/scan/accuracy?format=csv` | Same, as CSV download | `text/csv` |
 | `POST /api/scan/retry/[chcId]` | Re-run the VLM against the JPEG already in the derivative store (`maxDuration = 60`) | `{ code, record, log? }` |
+| `GET /api/scan/facets` | **Tier 1.5 Run 2 facet-review worklist** — eval artifact (`data/scan/facets-run2.json`) + staged corrections + baseline captions + `graduated` flag (local-only) | `{ rows: FacetReviewRow[] }` · 403 · 404 |
+| `POST /api/scan/facets/[chcId]` | **Save a staff facet correction / verdict** to the staging file; `{reviewed:true}` **graduates** the approved facets to `photo_enrichment` (Stage 0, validated 99 only), `{reviewed:false}` clears them. Never touches `scan_review` (local-only) | `FacetReviewEntry` · 403 · 400 |
 
 Client calls go through `scanApi` (`lib/scan-api.ts`) — components never `fetch` these paths directly.
 

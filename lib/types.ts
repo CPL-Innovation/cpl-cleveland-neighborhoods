@@ -93,7 +93,8 @@ export type StreetGround =
   | "dirt_unpaved"
   | "brick_street"
   | "snow_cover"
-  | "open_lot";
+  | "open_lot"
+  | "cracked_pavement"; // v0.5: a ground STATE, moved here from condition_and_change
 export type TransportFeature =
   | "utility_poles"
   | "overhead_wires"
@@ -111,8 +112,7 @@ export type ConditionChange =
   | "demolition_rubble"
   | "under_construction"
   | "fire_damage"
-  | "deteriorating"
-  | "cracked_pavement";
+  | "deteriorating"; // v0.5: cracked_pavement removed (it's a ground state → street_and_ground)
 export type PersonPresent = "people" | "children" | "workers" | "vendors" | "animals";
 
 export interface SceneTextItem {

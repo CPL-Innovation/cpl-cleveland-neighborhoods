@@ -91,7 +91,7 @@ batch runs on an operator's machine, not Vercel. Env vars go in the Vercel dashb
 ## Known gaps / future passes
 
 - Patron site (Leaflet map) migration into the Next app.
-- `photo_enrichment` write-back from the *record-edit* surface (today only the scan-accept path writes it).
+- `photo_enrichment` write-back from the *record-edit* surface (today its writers are the scan-accept hook and the Tier 1.5 Stage 0 facet graduation — `lib/facet-review-store.ts`, scoped to the validated 99).
 - Auth + roles (librarian-editor vs admin).
 - Controlled-vocab tables (neighborhoods/themes/branches), geocoding, Tier-2 `vlmInterpret` — all flagged in the design logs.
 - Cleanup of the superseded static files once the new path is verified against a live Supabase project.
