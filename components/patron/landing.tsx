@@ -14,6 +14,7 @@ import {
   adaptHarvestedRecord, type Photo, type HarvestedRecord,
 } from "./data";
 import { SearchIcon, SearchPanel, PhotoDetailPanel, StoryPanel } from "./panels";
+import { BrowseByPicture } from "./browse-by-picture";
 
 const ClevelandMap = dynamic(() => import("./cleveland-map"), { ssr: false });
 
@@ -32,6 +33,7 @@ export default function PatronLanding() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [nearYouActive, setNearYouActive] = React.useState(false);
   const [storyOpen, setStoryOpen] = React.useState(false);
+  const [browseOpen, setBrowseOpen] = React.useState(false);
   const [whisperOpen, setWhisperOpen] = React.useState(true);
 
   // ── Load harvested ContentDM records and merge over the curated seed ──
@@ -73,6 +75,7 @@ export default function PatronLanding() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (selected) setSelected(null);
+        else if (browseOpen) setBrowseOpen(false);
         else if (storyOpen) setStoryOpen(false);
         else if (searchOpen) setSearchOpen(false);
       }
@@ -83,7 +86,7 @@ export default function PatronLanding() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, storyOpen, searchOpen]);
+  }, [selected, storyOpen, searchOpen, browseOpen]);
 
   const zoomIn = () => setZoom((z) => Math.min(2.4, +(z + 0.2).toFixed(2)));
   const zoomOut = () => setZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)));
@@ -96,7 +99,7 @@ export default function PatronLanding() {
       WebkitFontSmoothing: "antialiased", display: "flex", flexDirection: "column",
       overflow: "hidden", position: "relative",
     }}>
-      <DesktopHeader onSearchClick={() => setSearchOpen(true)} />
+      <DesktopHeader onSearchClick={() => setSearchOpen(true)} onBrowseClick={() => setBrowseOpen(true)} />
       <div ref={mapWrapRef} style={{ position: "relative", flex: 1, minHeight: 0 }}>
         <ClevelandMap
           width={size.w}
@@ -147,13 +150,20 @@ export default function PatronLanding() {
           onOpenPhoto={(p) => { setStoryOpen(false); setSelected(p); }}
         />
       )}
+
+      {browseOpen && (
+        <BrowseByPicture
+          onClose={() => setBrowseOpen(false)}
+          onOpenPhoto={(p) => setSelected(p)}
+        />
+      )}
     </div>
   );
 }
 
 // ── Header ──────────────────────────────────────────────────────
 
-function DesktopHeader({ onSearchClick }: { onSearchClick: () => void }) {
+function DesktopHeader({ onSearchClick, onBrowseClick }: { onSearchClick: () => void; onBrowseClick: () => void }) {
   return (
     <div style={{
       height: 72, borderBottom: "1px solid #D6CDBD", display: "flex", alignItems: "center",
@@ -178,7 +188,7 @@ function DesktopHeader({ onSearchClick }: { onSearchClick: () => void }) {
       <div style={{ flex: 1 }} />
       <nav style={{ display: "flex", gap: 28, fontSize: 14, letterSpacing: 0.1, color: "#1A1814" }}>
         <NavLink>Stories</NavLink>
-        <NavLink>Browse</NavLink>
+        <NavLink onClick={onBrowseClick}>Browse</NavLink>
         <NavLink>About</NavLink>
       </nav>
       <div style={{ width: 1, height: 22, background: "#D6CDBD", marginLeft: 4 }} />
@@ -200,10 +210,11 @@ function DesktopHeader({ onSearchClick }: { onSearchClick: () => void }) {
   );
 }
 
-function NavLink({ children, active }: { children: React.ReactNode; active?: boolean }) {
+function NavLink({ children, active, onClick }: { children: React.ReactNode; active?: boolean; onClick?: () => void }) {
   const [hov, setHov] = React.useState(false);
   return (
     <a
+      onClick={onClick}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{

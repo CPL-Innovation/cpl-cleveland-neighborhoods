@@ -124,6 +124,18 @@ export interface ArchivalMarkupItem {
   kind: ArchivalMarkupKind;
 }
 
+// One faceted photo as the patron convergence slice consumes it (live read of the enrichment
+// store — vlm-facet-spec / convergence-slice-spec). facets = the graduated v0.5 record;
+// caption/year/address come from the box-scan's Tier-1 record. Read-only on the patron side.
+export interface FacetPhoto {
+  chc_id: string;
+  jpeg_url: string;
+  year: number | null;
+  address: string | null;
+  caption: string | null;
+  facets: Run2Facets;
+}
+
 export interface Run2Facets {
   // BUILDING (decomposed from raw `structures`)
   building_type?: BuildingType;

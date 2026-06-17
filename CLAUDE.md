@@ -22,6 +22,7 @@ VLM-reads masters into records, Review captures verdicts (with an Accuracy eval 
 
 - **Staff + scan surfaces: migrated** to Next.js 14 (App Router) + TypeScript. Live at `/staff`.
 - **Patron site (Leaflet map, landing): migrated** to Next + TypeScript — lives at the root route `/` (`app/page.tsx` → `components/patron/`). The Leaflet map is client-only (`next/dynamic`, `ssr:false`); the photo pool is the curated demo seed merged with harvested ContentDM records (`/data/tier3-all/records.json`) in React state (the old `window.ALL_PHOTOS` global is retired). Leaflet is an npm dep now, not a CDN script. **The whole frontend is now Next** — no static `*.jsx`/`index.html` left at root.
+- **Convergence slice (Tier 1.5 → patron): built.** "Browse by what's in the picture" (header → Browse) — facet filters + 2 exemplar queries (signage · streets mid-change) over the validated 99, a result grid into the existing photo-detail panel (extended with the facets + caption + an "AI-extracted (staff-reviewable)" honesty label). **First LIVE enrichment→patron read** (`/api/patron/facets` → `lib/patron-facets.ts`, read-only on the patron side); the architecture's "patron frontend is genuinely static" is retired *for enrichment only* (catalog read stays a static harvest). Local-first; public-read hardening (read-only role / RLS / rate-limit) deferred to host-on-commit.
 - **Legacy prototype files removed.** The superseded staff/scan `*.jsx` and their host HTMLs (`enrichment-app.html`, `enrichment.html`, `mockup.html`), **and the patron prototype (`index.html` + `cleveland-map.jsx` + `desktop-landing.jsx`)**, were deleted once the Next tree replaced them (recoverable from git history); a few `lib/`/`components/` files still carry `// Ported from <name>.jsx` provenance comments. The legacy `scan/*.mjs` were likewise deleted; only `scan/env.mjs` remains, still loaded by the `.ts` CLIs.
 - **Local-by-default in dev:** the DB is **local Postgres** (Postgres.app) and derived JPEGs live on **local disk** (`public/derivatives/`, served at `/derivatives/<chc>.jpg`). Both swap to Supabase (Postgres + Storage) by env vars alone — no code change. Supabase is the deploy target, not a dev dependency.
 - **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
@@ -92,12 +93,15 @@ app/
   api/scan/...            → records, records/[chcId], accuracy, retry/[chcId],
                             masters (list scans/masters/), ingest/[chcId] (UI-driven, local-only),
                             prep + prep/[chcId] (crop/deskew engine, local-only),
-                            facets + facets/[chcId] (Tier 1.5 Run 2 review: reads eval artifact,
-                            writes staging only — local-only, never photo_enrichment/scan_review)
+                            facets + facets/[chcId] (Tier 1.5 Run 2 review: reads eval artifact +
+                            staging; on approve graduates facets → photo_enrichment, Stage 0 / 99 only)
+  api/patron/facets       → convergence slice: LIVE read-only read of the 99 graduated facets
+                            (photo_enrichment ⋈ scan_review), "browse by what's in the picture"
   layout.tsx, globals.css
 components/
   patron/                 → landing (DesktopLanding + map overlays), cleveland-map (Leaflet,
-                            dynamic/ssr:false), panels (search · photo-detail · story-trail),
+                            dynamic/ssr:false), panels (search · photo-detail+facets · story-trail),
+                            browse-by-picture (convergence slice — facet filters → grid → detail),
                             data (curated seed + projection + harvest adapt), patron.css
   staff/                  → nav (NavContext), ui (shared primitives), shell, app (router),
                             home, photos-list, record-edit, story-author
@@ -109,7 +113,8 @@ lib/                      → db, scan-store, accuracy, vlm-extract, storage, sc
                             scan-ingest (shared derive→store→VLM→DB core),
                             vlm-facet (Tier 1.5 Run 1 discovery — 3-way sibling to vlm-extract),
                             vlm-run2 (Tier 1.5 Run 2 — Gemini enforced-enum extraction) +
-                            facet-review-store (Run 2 review staging — reads artifact, never prod),
+                            facet-review-store (Run 2 review staging + Stage 0 graduation → photo_enrichment),
+                            patron-facets (convergence slice — live read-only read of the 99),
                             prep-engine (drives crop_engine.py) + prep-store + prep-api,
                             tokens, types, normalize-address
 drizzle/                  → schema.ts (source of truth for the DB), migrations/

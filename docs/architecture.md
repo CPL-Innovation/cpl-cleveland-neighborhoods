@@ -90,7 +90,7 @@ batch runs on an operator's machine, not Vercel. Env vars go in the Vercel dashb
 
 ## Known gaps / future passes
 
-- Patron site (Leaflet map) migration into the Next app.
+- Patron site (Leaflet map) is migrated. The **convergence slice** ("browse by what's in the picture") added the first **live enrichment→patron read** (`/api/patron/facets` → `lib/patron-facets.ts`): read-only over the 99 graduated facets (`photo_enrichment` ⋈ `scan_review`). Public-read hardening (read-only role / RLS / rate-limiting) is deferred to host-on-commit; the catalog read stays a static harvest.
 - `photo_enrichment` write-back from the *record-edit* surface (today its writers are the scan-accept hook and the Tier 1.5 Stage 0 facet graduation — `lib/facet-review-store.ts`, scoped to the validated 99).
 - Auth + roles (librarian-editor vs admin).
 - Controlled-vocab tables (neighborhoods/themes/branches), geocoding, Tier-2 `vlmInterpret` — all flagged in the design logs.

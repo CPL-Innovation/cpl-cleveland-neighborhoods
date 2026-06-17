@@ -144,8 +144,9 @@ export function PhotoDetailPanel({
   onOpenPhoto: (p: Photo) => void;
   photos: Photo[];
 }) {
-  // Neighbors-in-time: within ~80 viewBox units AND ±8 years.
-  const neighbors = photos.filter((p) =>
+  // Neighbors-in-time: within ~80 viewBox units AND ±8 years. Skipped for the faceted 99
+  // (they aren't map-placed — the convergence slice opens them from the browse grid).
+  const neighbors = photo.facets ? [] : photos.filter((p) =>
     p.id !== photo.id &&
     Math.hypot(p.x - photo.x, p.y - photo.y) < 80 &&
     Math.abs(p.year - photo.year) <= 8
@@ -155,10 +156,10 @@ export function PhotoDetailPanel({
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 30, background: "rgba(26,24,20,0.18)" }} />
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, zIndex: 59, background: "rgba(26,24,20,0.18)" }} />
       <div style={{
         position: "absolute", top: 0, right: 0, bottom: 0,
-        width: 480, zIndex: 31, background: "#FFFFFF",
+        width: 480, zIndex: 60, background: "#FFFFFF",
         borderLeft: "1px solid #D6CDBD", boxShadow: "-10px 0 40px rgba(26,24,20,0.12)",
         display: "flex", flexDirection: "column",
         animation: "patronSlideIn 260ms cubic-bezier(.2,.8,.2,1)",
@@ -251,6 +252,8 @@ export function PhotoDetailPanel({
             <MetaLabel>Neighborhood</MetaLabel><MetaValue>{photo.neighborhood}</MetaValue>
             <MetaLabel>Held at</MetaLabel><MetaValue>{photo.branch}</MetaValue>
           </div>
+
+          {photo.facets && <FacetsBlock photo={photo} />}
 
           {photo.note && (
             <div style={{
@@ -362,6 +365,106 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "good" | "w
       fontSize: 10.5, letterSpacing: 0.4, textTransform: "uppercase",
       padding: "4px 9px", borderRadius: 999,
       background: t.bg, color: t.fg, border: "1px solid " + t.bd,
+    }}>{children}</span>
+  );
+}
+
+// ── Tier 1.5 facets block (convergence slice) ───────────────────
+// Renders the AI-extracted facets beside the photo, grouped by axis. Honesty-labeled
+// "AI-extracted (staff-reviewable)" — the visible-only contract. scene_text shows the
+// transcribed signage verbatim (the payoff the catalog can't surface).
+const FL = (s: string) => s.replace(/_/g, " ");
+
+function FacetsBlock({ photo }: { photo: Photo }) {
+  const f = photo.facets;
+  if (!f) return null;
+
+  // Building summary line (decomposed structure facets).
+  const buildingBits = [
+    f.building_type && FL(f.building_type),
+    f.stories && f.stories !== "unknown" && `${f.stories}-story`,
+    f.has_porch && "porch",
+    f.roof_form?.length && `${f.roof_form.map(FL).join(" / ")} roof`,
+  ].filter(Boolean) as string[];
+
+  const chipGroups: [string, string[]][] = [
+    ["Materials", (f.materials ?? []).map(FL)],
+    ["Street & ground", (f.street_and_ground ?? []).map(FL)],
+    ["Transport", (f.transport ?? []).map(FL)],
+    ["Vegetation", (f.vegetation ?? []).map(FL)],
+    ["Accessory", (f.accessory_structures ?? []).map(FL)],
+    ["Change", (f.condition_and_change ?? []).map(FL)],
+    ["People", (f.people_present ?? []).map(FL)],
+  ];
+
+  return (
+    <div style={{ margin: "20px 18px 0", padding: "14px 16px", background: "#FAF6EE", border: "1px solid #EEE6D6", borderRadius: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{
+          fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 9.5, letterSpacing: 0.6,
+          textTransform: "uppercase", color: "#8B6E1F", background: "#FBF1DC", border: "1px solid #E9D6A0",
+          padding: "2px 7px", borderRadius: 3,
+        }}>AI-extracted · staff-reviewable</span>
+      </div>
+
+      {photo.caption && (
+        <div style={{
+          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, serif", fontSize: 14.5, lineHeight: 1.45,
+          color: "#1A1814", marginBottom: 12, fontStyle: "italic",
+        }}>“{photo.caption}”</div>
+      )}
+
+      {buildingBits.length > 0 && (
+        <FacetRow label="Building">{buildingBits.join(" · ")}</FacetRow>
+      )}
+
+      {chipGroups.filter(([, v]) => v.length).map(([label, vals]) => (
+        <div key={label} style={{ marginBottom: 8 }}>
+          <FacetRowLabel>{label}</FacetRowLabel>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 3 }}>
+            {vals.map((v) => <FacetChip key={v}>{v}</FacetChip>)}
+          </div>
+        </div>
+      ))}
+
+      {f.scene_text?.length ? (
+        <div style={{ marginTop: 10 }}>
+          <FacetRowLabel>Signage in the photo</FacetRowLabel>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+            {f.scene_text.map((s, i) => (
+              <div key={i} style={{ fontSize: 13.5, color: "#1A1814" }}>
+                <span style={{ fontWeight: 600 }}>“{s.text}”</span>
+                <span style={{ color: "#A39684", fontSize: 11.5, marginLeft: 6, fontFamily: '"JetBrains Mono", ui-monospace, monospace' }}>{FL(s.kind)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FacetRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <FacetRowLabel>{label}</FacetRowLabel>
+      <div style={{ fontSize: 13.5, color: "#1A1814", marginTop: 2 }}>{children}</div>
+    </div>
+  );
+}
+function FacetRowLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10, letterSpacing: 0.6,
+      textTransform: "uppercase", color: "#A39684",
+    }}>{children}</div>
+  );
+}
+function FacetChip({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      fontSize: 12, color: "#1F5963", background: "#EAF0EF", border: "1px solid #CBD9D8",
+      padding: "3px 9px", borderRadius: 999,
     }}>{children}</span>
   );
 }

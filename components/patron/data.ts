@@ -26,6 +26,10 @@ export interface Photo {
   date_display?: string;
   lat?: number;
   lng?: number;
+  // Convergence-slice (Tier 1.5 facets) — present only on the faceted 99:
+  facets?: import("@/lib/types").Run2Facets;
+  caption?: string | null;
+  aiExtracted?: boolean; // render the "AI-extracted (staff-reviewable)" honesty label
 }
 
 // A raw Tier-3 harvested record (data/tier3-all/records.json). Loose by design.

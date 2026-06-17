@@ -25,8 +25,9 @@ All routes run on the Node runtime, `dynamic = "force-dynamic"`, and read/write 
 | `POST /api/scan/retry/[chcId]` | Re-run the VLM against the JPEG already in the derivative store (`maxDuration = 60`) | `{ code, record, log? }` |
 | `GET /api/scan/facets` | **Tier 1.5 Run 2 facet-review worklist** — eval artifact (`data/scan/facets-run2.json`) + staged corrections + baseline captions + `graduated` flag (local-only) | `{ rows: FacetReviewRow[] }` · 403 · 404 |
 | `POST /api/scan/facets/[chcId]` | **Save a staff facet correction / verdict** to the staging file; `{reviewed:true}` **graduates** the approved facets to `photo_enrichment` (Stage 0, validated 99 only), `{reviewed:false}` clears them. Never touches `scan_review` (local-only) | `FacetReviewEntry` · 403 · 400 |
+| `GET /api/patron/facets` | **Convergence slice** — LIVE read-only read of the 99 graduated facets (`photo_enrichment` ⋈ `scan_review` on CHC ID) for "browse by what's in the picture." Patron surface never writes; public-read hardening deferred to host-on-commit (`lib/patron-facets.ts`) | `{ photos: FacetPhoto[] }` · 500 |
 
-Client calls go through `scanApi` (`lib/scan-api.ts`) — components never `fetch` these paths directly.
+Staff client calls go through `scanApi` (`lib/scan-api.ts`); the patron convergence panel fetches `/api/patron/facets` directly (the patron app doesn't use `scanApi`).
 
 ## Notes
 - `POST .../records/[chcId]` deep-merges the `review` JSONB one level (a partial verdict patch preserves the rest of the review). See `lib/scan-store.ts` `upsert`.
