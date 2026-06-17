@@ -7,9 +7,10 @@
 // (dedicated read-only role / RLS / rate-limiting) is deferred to host-on-commit — built right
 // locally (pure reads), hardened when the patron surface is committed to deployment.
 //
-// Join: facets come from photo_enrichment (graduated Stage 0); caption/year/address/jpeg come
-// from the box-scan's Tier-1 record (scan_review), both keyed by CHC ID. Joined in JS to avoid
-// JSONB-extraction SQL.
+// After the tier1-normalize-unify slice, caption/year/address/coords are normalized ONTO the
+// unified photo_enrichment row (the two-table join collapses to a single read). This module reads
+// those normalized fields directly; for graduated-but-not-yet-finalized photos it falls back to the
+// box-scan's Tier-1 record (scan_review), keyed by the surrogate id = CHC ID.
 import type { FacetPhoto, Run2Facets, ScanRecord } from "@/lib/types";
 
 const year4 = (s: string | undefined | null): number | null => {
@@ -17,7 +18,7 @@ const year4 = (s: string | undefined | null): number | null => {
   return m ? Number(m[0]) : null;
 };
 
-// Caption/year/address as confirmed by the Tier-1 review (or the raw VLM read as fallback).
+// Fallback caption/year/address from the Tier-1 review (used only before Finalize normalizes them).
 function tier1Fields(rec: ScanRecord | undefined) {
   const r = rec?.review;
   const caption =
@@ -38,29 +39,52 @@ export async function listFacetPhotos(): Promise<FacetPhoto[]> {
   const { listRecords } = await import("@/lib/scan-store");
 
   const enriched = await getDb()
-    .select({ id: photoEnrichment.contentdmId, facets: photoEnrichment.facets })
+    .select({
+      id: photoEnrichment.id,
+      facets: photoEnrichment.facets,
+      patronCaption: photoEnrichment.patronCaption,
+      addressRaw: photoEnrichment.addressRaw,
+      dateStart: photoEnrichment.dateStart,
+      yearRaw: photoEnrichment.yearRaw,
+      captionSource: photoEnrichment.captionSource,
+      lat: photoEnrichment.lat,
+      lng: photoEnrichment.lng,
+    })
     .from(photoEnrichment)
     .where(isNotNull(photoEnrichment.facetsReviewedAt));
 
-  // Box-scan Tier-1 records, indexed for the join.
+  // Box-scan Tier-1 records — only needed as a fallback for not-yet-finalized photos.
+  const needFallback = enriched.some((e) => !e.captionSource);
   const recs = new Map<string, ScanRecord>();
-  try {
-    for (const r of await listRecords()) recs.set(r.chc_id, r);
-  } catch {
-    /* DB read of scan_review failed — captions/addresses just come back null */
+  if (needFallback) {
+    try {
+      for (const r of await listRecords()) recs.set(r.chc_id, r);
+    } catch {
+      /* DB read of scan_review failed — captions/addresses just come back null */
+    }
   }
 
   return enriched
     .filter((e) => e.facets)
     .map((e) => {
-      const rec = recs.get(e.id);
-      const { caption, address, year } = tier1Fields(rec);
+      // Prefer the normalized (Finalize) fields; fall back to the raw Tier-1 review otherwise.
+      let caption = e.patronCaption;
+      let address = e.addressRaw;
+      let year = year4(e.dateStart) ?? year4(e.yearRaw);
+      if (!e.captionSource) {
+        const t1 = tier1Fields(recs.get(e.id));
+        caption = caption ?? t1.caption;
+        address = address ?? t1.address;
+        year = year ?? t1.year;
+      }
       return {
         chc_id: e.id,
-        jpeg_url: rec?.jpeg_url || `/derivatives/${e.id}.jpg`,
+        jpeg_url: recs.get(e.id)?.jpeg_url || `/derivatives/${e.id}.jpg`,
         year,
         address,
         caption,
+        lat: e.lat != null ? Number(e.lat) : null,
+        lng: e.lng != null ? Number(e.lng) : null,
         facets: e.facets as Run2Facets,
       };
     })

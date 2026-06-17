@@ -102,7 +102,7 @@ async function graduatedSet(): Promise<Set<string>> {
     const { photoEnrichment } = await import("@/drizzle/schema");
     const { isNotNull } = await import("drizzle-orm");
     const rows = await getDb()
-      .select({ id: photoEnrichment.contentdmId })
+      .select({ id: photoEnrichment.id })
       .from(photoEnrichment)
       .where(isNotNull(photoEnrichment.facetsReviewedAt));
     return new Set(rows.map((r) => r.id));
@@ -137,10 +137,11 @@ export async function listFacetReview(): Promise<FacetReviewRow[]> {
 }
 
 // ── Stage 0 production write (vlm-facet-spec v0.5 §"Stage 0 — graduate the validated 99") ──
-// Writes a staff-approved facet record to the production photo_enrichment store, keyed by CHC ID
-// (= contentdm_id for box-scans). Scoped by construction to the validated 99 — the only records
-// the artifact (and therefore this surface) knows about. Sets only the facet columns + provenance,
-// leaving any other enrichment fields untouched. This is the firebreak lifting, Stage 0 only.
+// Writes a staff-approved facet record to the production photo_enrichment store. Box-scans key on
+// the surrogate PK `id` = CHC ID, with source = box_scan (the unified Photos table — see the
+// tier1-normalize-unify slice). Scoped by construction to the validated 99 — the only records the
+// artifact (and therefore this surface) knows about. Sets only the facet columns + provenance,
+// leaving any normalized Tier-1 fields (written by the Finalize stage) untouched. Firebreak Stage 0.
 async function graduateFacets(chcId: string, facets: Run2Facets, reviewedBy: string): Promise<void> {
   const { getDb } = await import("@/lib/db");
   const { photoEnrichment } = await import("@/drizzle/schema");
@@ -153,11 +154,11 @@ async function graduateFacets(chcId: string, facets: Run2Facets, reviewedBy: str
   };
   await getDb()
     .insert(photoEnrichment)
-    .values({ contentdmId: chcId, ...set })
-    .onConflictDoUpdate({ target: photoEnrichment.contentdmId, set });
+    .values({ id: chcId, source: "box_scan", sourceId: chcId, ...set })
+    .onConflictDoUpdate({ target: photoEnrichment.id, set });
 }
 
-// Un-graduate: clear only the facet columns (leave any other enrichment intact).
+// Un-graduate: clear only the facet columns (leave any normalized Tier-1 fields intact).
 async function ungraduateFacets(chcId: string): Promise<void> {
   const { getDb } = await import("@/lib/db");
   const { photoEnrichment } = await import("@/drizzle/schema");
@@ -165,7 +166,7 @@ async function ungraduateFacets(chcId: string): Promise<void> {
   await getDb()
     .update(photoEnrichment)
     .set({ facets: null, facetsReviewedAt: null, facetsReviewedBy: null, facetsSource: null, updatedAt: new Date() })
-    .where(eq(photoEnrichment.contentdmId, chcId));
+    .where(eq(photoEnrichment.id, chcId));
 }
 
 export interface FacetReviewPatch {

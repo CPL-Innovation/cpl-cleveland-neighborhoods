@@ -3,6 +3,7 @@
 import type { ScanRecord, AccuracyRollup } from "@/lib/types";
 import type { MasterEntry, IngestResult } from "@/lib/scan-ingest";
 import type { FacetReviewRow, FacetReviewEntry, FacetReviewPatch } from "@/lib/facet-review-store";
+import type { FinalizeRow, FinalizeState, FinalizeRunResult } from "@/lib/finalize-store";
 
 export const scanApi = {
   async list(): Promise<ScanRecord[]> {
@@ -81,6 +82,36 @@ export const scanApi = {
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       throw new Error(e.error || `save facet ${r.status}`);
+    }
+    return r.json();
+  },
+
+  // ── Finalize stage (Tier-1 normalize + unify; local-only) ──
+  async finalizeList(): Promise<{ rows: FinalizeRow[]; counts: Record<FinalizeState | "reviewed" | "total", number> }> {
+    const r = await fetch("/api/scan/finalize");
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `finalize ${r.status}`);
+    }
+    return r.json();
+  },
+  async finalizeRun(): Promise<FinalizeRunResult> {
+    const r = await fetch("/api/scan/finalize", { method: "POST" });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `finalize run ${r.status}`);
+    }
+    return r.json();
+  },
+  async finalizePin(id: string, lat: number, lng: number): Promise<{ ok: boolean; chc_id: string; lat: number; lng: number }> {
+    const r = await fetch(`/api/scan/finalize/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lng }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `pin ${r.status}`);
     }
     return r.json();
   },

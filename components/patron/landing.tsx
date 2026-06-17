@@ -11,8 +11,9 @@ import React from "react";
 import dynamic from "next/dynamic";
 import {
   CLEVELAND_PHOTOS, MILLIONAIRES_ROW, CURATED_PHOTOS,
-  adaptHarvestedRecord, type Photo, type HarvestedRecord,
+  adaptHarvestedRecord, adaptFacetPhoto, type Photo, type HarvestedRecord,
 } from "./data";
+import type { FacetPhoto } from "@/lib/types";
 import { SearchIcon, SearchPanel, PhotoDetailPanel, StoryPanel } from "./panels";
 import { BrowseByPicture } from "./browse-by-picture";
 
@@ -36,18 +37,25 @@ export default function PatronLanding() {
   const [browseOpen, setBrowseOpen] = React.useState(false);
   const [whisperOpen, setWhisperOpen] = React.useState(true);
 
-  // ── Load harvested ContentDM records and merge over the curated seed ──
+  // ── Merge the pool: curated seed + harvested ContentDM + the unified box-scan 99 ──
+  // The box-scans (live read of the unified enrichment store) carry geocoded coords from the
+  // Finalize stage, so they place on the map alongside ContentDM records — one collection.
   React.useEffect(() => {
     let cancelled = false;
-    fetch("/data/tier3-all/records.json")
+    const harvest = fetch("/data/tier3-all/records.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("records.json missing"))))
-      .then((raw: HarvestedRecord[]) => {
-        if (cancelled) return;
-        const harvested = raw.map(adaptHarvestedRecord).filter((p): p is Photo => p !== null);
-        setPhotos([...CLEVELAND_PHOTOS, ...harvested, ...MILLIONAIRES_ROW]);
-        console.log(`[harvest] loaded ${harvested.length} ContentDM records into the patron map`);
-      })
-      .catch((err) => console.warn("[harvest] using curated photos only:", err.message));
+      .then((raw: HarvestedRecord[]) => raw.map(adaptHarvestedRecord).filter((p): p is Photo => p !== null))
+      .catch((err) => { console.warn("[harvest] using curated photos only:", err.message); return [] as Photo[]; });
+    const boxScans = fetch("/api/patron/facets")
+      .then((r) => (r.ok ? r.json() : { photos: [] }))
+      .then((d: { photos: FacetPhoto[] }) => (d.photos || []).map(adaptFacetPhoto).filter((p): p is Photo => p !== null))
+      .catch(() => [] as Photo[]);
+
+    Promise.all([harvest, boxScans]).then(([harvested, box]) => {
+      if (cancelled) return;
+      setPhotos([...CLEVELAND_PHOTOS, ...harvested, ...box, ...MILLIONAIRES_ROW]);
+      console.log(`[map] ${harvested.length} ContentDM + ${box.length} box-scan placed on the map`);
+    });
     return () => { cancelled = true; };
   }, []);
 

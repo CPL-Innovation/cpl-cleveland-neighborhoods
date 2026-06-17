@@ -25,9 +25,13 @@ All routes run on the Node runtime, `dynamic = "force-dynamic"`, and read/write 
 | `POST /api/scan/retry/[chcId]` | Re-run the VLM against the JPEG already in the derivative store (`maxDuration = 60`) | `{ code, record, log? }` |
 | `GET /api/scan/facets` | **Tier 1.5 Run 2 facet-review worklist** — eval artifact (`data/scan/facets-run2.json`) + staged corrections + baseline captions + `graduated` flag (local-only) | `{ rows: FacetReviewRow[] }` · 403 · 404 |
 | `POST /api/scan/facets/[chcId]` | **Save a staff facet correction / verdict** to the staging file; `{reviewed:true}` **graduates** the approved facets to `photo_enrichment` (Stage 0, validated 99 only), `{reviewed:false}` clears them. Never touches `scan_review` (local-only) | `FacetReviewEntry` · 403 · 400 |
-| `GET /api/patron/facets` | **Convergence slice** — LIVE read-only read of the 99 graduated facets (`photo_enrichment` ⋈ `scan_review` on CHC ID) for "browse by what's in the picture." Patron surface never writes; public-read hardening deferred to host-on-commit (`lib/patron-facets.ts`) | `{ photos: FacetPhoto[] }` · 500 |
+| `GET /api/scan/finalize` | **Finalize worklist** — reviewed box-scans + their normalize/pin state (Tier-1 normalize+unify, local-only) | `{ rows: FinalizeRow[], counts }` · 403 · 500 |
+| `POST /api/scan/finalize` | **Run the batch** — normalize the pending reviewed set into the unified `photo_enrichment` (caption copy · stamp-date parse · geocode); resumable (local-only) | `FinalizeRunResult` · 403 · 500 |
+| `POST /api/scan/finalize/[chcId]` | **Staff pin** on a geocode miss (`{ lat, lng }` → `geo_source = staff_lookup`); local-only | `{ ok, chc_id, lat, lng }` · 403 · 400 |
+| `GET /api/patron/facets` | **Convergence slice** — LIVE read-only read of the 99 graduated facets (single-table read of the unified `photo_enrichment`; normalized caption/year/address/coords, falling back to `scan_review` only pre-Finalize) for "browse by what's in the picture" **and** the box-scan markers on the patron map. Patron surface never writes; public-read hardening deferred to host-on-commit (`lib/patron-facets.ts`) | `{ photos: FacetPhoto[] }` · 500 |
+| `GET /api/staff/photos` | **Unified box-scan rows** for the staff Photos list (read-only; returns `{ photos: [] }` rather than erroring if the DB is down) | `{ photos: BoxScanStaffPhoto[] }` |
 
-Staff client calls go through `scanApi` (`lib/scan-api.ts`); the patron convergence panel fetches `/api/patron/facets` directly (the patron app doesn't use `scanApi`).
+Staff client calls go through `scanApi` (`lib/scan-api.ts`); the patron surfaces fetch `/api/patron/facets` directly (the patron app doesn't use `scanApi`), and the staff Photos list fetches `/api/staff/photos` directly.
 
 ## Notes
 - `POST .../records/[chcId]` deep-merges the `review` JSONB one level (a partial verdict patch preserves the rest of the review). See `lib/scan-store.ts` `upsert`.

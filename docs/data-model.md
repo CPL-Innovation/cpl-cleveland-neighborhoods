@@ -45,18 +45,29 @@ writes the lossless `scans/masters/<chc>.tif` — and **that file is the only ha
 of the pipeline**. Nothing downstream (`scan_review`, Run, Review) reads `scan_prep`; the two
 domains meet only at `scans/masters/`.
 
-### `photo_enrichment` — 1:1 enrichment record
-The canonical enrichment row for a photo (ContentDM-keyed, or `chc_id` for box-scans). Full
-field list in `drizzle/schema.ts`; rationale per field in the design vault
-(`build/data-backend/enrichment-schema.md`). Writers today: the scan-accept path
-(`lib/scan-store.ts` → `buildEnrichment`, hooks only) and — newly — the **Tier 1.5 Stage 0
-facet graduation** (`lib/facet-review-store.ts`), which on staff approval writes the `facets`
-JSONB column (the enforced Run 2 `Run2Facets` record) plus `facets_reviewed_at` / `_by` /
-`facets_source` provenance. That write is **scoped to the validated 99** (Stage 0 of the gated
-Tier 1.5 → production rollout); the record-edit surface still does not write this table.
-Controlled-vocab FKs (neighborhood/themes/branch) are plain text for now — vocab tables deferred.
+### `photo_enrichment` — 1:1 enrichment record (the unified Photos table)
+The canonical enrichment row for a photo — ContentDM **or** box-scan. Full field list in
+`drizzle/schema.ts`; rationale per field in the design vault (`build/data-backend/enrichment-schema.md`).
+
+**Identity (thin model — tier1-normalize-unify slice):** a **surrogate PK `id`** (= the doc id for
+ContentDM, = `chc_id` for box-scans), a **`source` discriminator** (`contentdm | box_scan`), a
+`source_id` natural key, and a **nullable `contentdm_id`** (null for box-scans). One table, two
+sources; no reconciliation machinery (box ingestion is pilot-only).
+
+Writers today:
+- **Scan-accept path** (`lib/scan-store.ts` → `buildEnrichment`, hooks only).
+- **Tier 1.5 Stage 0 facet graduation** (`lib/facet-review-store.ts`): on staff approval writes the
+  `facets` JSONB (enforced Run 2 `Run2Facets`) + `facets_reviewed_at` / `_by` / `facets_source`
+  provenance. **Scoped to the validated 99** (Stage 0 of the gated Tier 1.5 → production rollout).
+- **Finalize stage** (`lib/finalize-store.ts`): normalizes the confirmed Tier-1 strings of the box-scan
+  99 onto the same unified row — `patron_caption`+`caption_source`, `address_raw`+geocoded `lat`/`lng`+
+  `geo_source`, `year_raw`+`date_start`+`date_source=archival_stamp` (raw kept beside, provenance per
+  field). Geocode misses go to the staff pin tray (`geo_source = staff_lookup`).
+
+The record-edit surface still does not write this table. Controlled-vocab FKs (neighborhood/themes/
+branch) are plain text for now — vocab tables deferred.
 
 ## Conventions
 - Timestamps `created_at` / `updated_at` (timezone-aware) on both tables.
-- No geocoding in this pilot — store the confirmed address string; `lat`/`lng`/`neighborhood_tag` stay null.
+- Geocoding happens in the **Finalize stage** (box-scan 99), behind a seam (`lib/geocode.ts`, OSM Nominatim; `GEOCODER=none` to disable). The scan-accept path still leaves `lat`/`lng` null — only Finalize / staff pins populate them. `neighborhood_tag` stays null (vocab deferred).
 - To change the schema: edit `drizzle/schema.ts` → `npm run db:generate` (review SQL) → `npm run db:push` or `db:migrate`.

@@ -14,6 +14,7 @@ export interface NavigateOpts {
 // The shape the staff screens consume (output of adaptHarvestedToStaff + SAMPLE_RECORDS).
 export interface StaffRecord {
   id: string;
+  source?: "box_scan" | "contentdm"; // which side of the unified Photos table (undefined = sample)
   thumb?: number;
   thumbUrl?: string | null;
   contentdmUrl?: string | null;
@@ -78,6 +79,50 @@ export function useNav(): NavCtx {
   return React.useContext(NavContext) ?? FALLBACK;
 }
 
+// A unified box-scan photo as the staff Photos list consumes it (from /api/staff/photos →
+// lib/staff-photos.ts). Adapted into the same StaffRecord shape as the ContentDM harvest so the
+// two sources render as one collection (tier1-normalize-unify slice).
+export interface BoxScanStaffPhoto {
+  chc_id: string;
+  jpeg_url: string;
+  address: string | null;
+  caption: string | null;
+  year: number | null;
+  lat: number | null;
+  lng: number | null;
+  public_status: string | null;
+  has_alt: boolean;
+  building_type: string | null;
+}
+
+export function adaptBoxScanToStaff(p: BoxScanStaffPhoto): StaffRecord {
+  const hasGeo = p.lat != null && p.lng != null;
+  return {
+    id: p.chc_id,
+    source: "box_scan",
+    thumbUrl: p.jpeg_url,
+    contentdmUrl: null,
+    title: p.address || p.chc_id,
+    year: p.year ? String(p.year) : "—",
+    nbhd: "Cleveland (box)",
+    themes: p.building_type ? [p.building_type.replace(/_/g, " ")] : [],
+    geo: hasGeo ? "exact" : "missing",
+    conf: hasGeo ? "1" : "—",
+    caption: p.caption ? "good" : "placeholder",
+    status: p.public_status || "draft",
+    alt: p.has_alt ? "ok" : "—",
+    notes: 0,
+    selected: false,
+    doneGeo: hasGeo,
+    captionText: p.caption || "",
+    noteText: "",
+    physicalLocation: "City Hall box (box-scan)",
+    creator: null,
+    rights: "Public Domain (pre-1931)",
+    rightsUri: null,
+  };
+}
+
 // Raw harvested Tier-3 record (data/tier3-all/records.json). Loose by design.
 type HarvestedRecord = Record<string, unknown> & { id: string | number };
 
@@ -90,6 +135,7 @@ export function adaptHarvestedToStaff(r: HarvestedRecord, i: number): StaffRecor
   const hasGeo = r.lat != null && r.lng != null;
   return {
     id: String(r.id),
+    source: "contentdm",
     thumb: (i % 12) + 1,
     thumbUrl: (r.thumb as string) || null,
     contentdmUrl: (r.contentdm_url as string) || null,

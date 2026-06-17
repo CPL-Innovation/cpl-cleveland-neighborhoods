@@ -7,31 +7,45 @@ import type { StaffRecord } from "@/components/staff/nav";
 
 // Photos list — spreadsheet mode with filters, saved views, bulk actions.
 
+// Source filter — the only functional filter so far (box-scan vs ContentDM in the unified table).
+export type SourceFilter = "all" | "box_scan" | "contentdm";
+function recordSource(r: StaffRecord): "box_scan" | "contentdm" {
+  return r.source === "box_scan" ? "box_scan" : "contentdm"; // sample/legacy rows read as ContentDM
+}
+
 export function StaffPhotosList() {
   const t = STAFF_TOKENS;
   const nav = useNav();
   const hasSelection = nav && nav.selection && nav.selection.size > 0;
+  const [source, setSource] = React.useState<SourceFilter>("all");
   return (
     <div style={{
       width: '100%', height: '100%',
       display: 'flex', flexDirection: 'column',
       background: t.bg, overflow: 'hidden',
     }}>
-      <PhotosFilterBar />
+      <PhotosFilterBar source={source} setSource={setSource} />
       {hasSelection && <PhotosBulkBar />}
       <div style={{
         flex: 1, minHeight: 0,
         display: 'flex',
       }}>
         <PhotosSavedViews />
-        <PhotosSheet />
+        <PhotosSheet source={source} />
       </div>
     </div>
   );
 }
 
-function PhotosFilterBar() {
+function PhotosFilterBar({ source, setSource }: { source: SourceFilter; setSource: (s: SourceFilter) => void }) {
   const t = STAFF_TOKENS;
+  const nav = useNav();
+  const all = nav?.records || [];
+  const counts = {
+    all: all.length,
+    box_scan: all.filter((r) => recordSource(r) === "box_scan").length,
+    contentdm: all.filter((r) => recordSource(r) === "contentdm").length,
+  };
   return (
     <div style={{
       padding: '12px 24px',
@@ -41,6 +55,12 @@ function PhotosFilterBar() {
       flexWrap: 'wrap',
       flexShrink: 0,
     }}>
+      {/* Source — functional segmented filter over the unified Photos table */}
+      <div style={{ display: 'flex', border: `1px solid ${t.border}`, borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+        <SourceBtn label="All" count={counts.all} active={source === 'all'} onClick={() => setSource('all')} t={t} />
+        <SourceBtn label="Box-scan" count={counts.box_scan} active={source === 'box_scan'} onClick={() => setSource('box_scan')} t={t} />
+        <SourceBtn label="ContentDM" count={counts.contentdm} active={source === 'contentdm'} onClick={() => setSource('contentdm')} t={t} />
+      </div>
       <FilterChip label="Neighborhood" value="Tremont" />
       <FilterChip label="Public status" value="any" />
       <FilterChip label="Has geo" value="missing" highlight/>
@@ -76,6 +96,26 @@ function PhotosFilterBar() {
         cursor: 'pointer', fontFamily: 'inherit',
       }}>Export ↓</button>
     </div>
+  );
+}
+
+function SourceBtn({ label, count, active, onClick, t }: { label: string; count: number; active?: boolean; onClick: () => void; t: StaffTokens }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '5px 11px',
+      background: active ? t.ink : 'transparent',
+      color: active ? '#F6F2EB' : t.ink,
+      border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12,
+      display: 'flex', alignItems: 'center', gap: 6,
+    }}>
+      {label}
+      <span style={{
+        fontFamily: t.mono, fontSize: 10,
+        color: active ? '#F6F2EB' : t.inkFaint,
+        background: active ? 'rgba(246,242,235,0.18)' : t.bg,
+        borderRadius: 8, padding: '0 5px', lineHeight: '15px', minWidth: 14, textAlign: 'center',
+      } as React.CSSProperties}>{count}</span>
+    </button>
   );
 }
 
@@ -262,12 +302,15 @@ function SavedView({ name, count, active }: { name: string; count: string; activ
   );
 }
 
-function PhotosSheet() {
+function PhotosSheet({ source = "all" }: { source?: SourceFilter }) {
   const t = STAFF_TOKENS;
   const nav = useNav();
   const selection = nav?.selection || new Set();
   const sourceRecords = nav?.records || null;
-  const rowsFromCtx = sourceRecords ? sourceRecords.map(r => ({ ...r, selected: selection.has(r.id) })) : null;
+  const filtered = sourceRecords && source !== "all"
+    ? sourceRecords.filter(r => recordSource(r) === source)
+    : sourceRecords;
+  const rowsFromCtx = filtered ? filtered.map(r => ({ ...r, selected: selection.has(r.id) })) : null;
   const rows: StaffRecord[] = rowsFromCtx || [
     { id: 'cpl_011_4738', thumb: 1, title: 'Euclid Ave looking east', year: 'c.1915', nbhd: '—', themes: ['streetcars'], geo: 'missing', conf: '—', caption: 'good', status: 'draft', alt: '—', notes: 2, selected: true },
     { id: 'cpl_011_4742', thumb: 2, title: 'Euclid Ave, same block, ~6mo later', year: 'c.1915', nbhd: '—', themes: ['streetcars'], geo: 'missing', conf: '—', caption: 'placeholder', status: 'draft', alt: '—', notes: 0, selected: true },
@@ -337,7 +380,7 @@ function PhotosSheet() {
         textAlign: 'center',
         borderTop: `1px solid ${t.borderSoft}`,
       }}>
-        showing 12 of 22 matching · scroll or ⌘↓ for more
+        {source === 'all' ? `${rows.length} photographs` : `${rows.length} ${source === 'box_scan' ? 'box-scan' : 'ContentDM'} photographs`} · scroll or ⌘↓ for more
       </div>
     </div>
   );

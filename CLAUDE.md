@@ -23,6 +23,7 @@ VLM-reads masters into records, Review captures verdicts (with an Accuracy eval 
 - **Staff + scan surfaces: migrated** to Next.js 14 (App Router) + TypeScript. Live at `/staff`.
 - **Patron site (Leaflet map, landing): migrated** to Next + TypeScript — lives at the root route `/` (`app/page.tsx` → `components/patron/`). The Leaflet map is client-only (`next/dynamic`, `ssr:false`); the photo pool is the curated demo seed merged with harvested ContentDM records (`/data/tier3-all/records.json`) in React state (the old `window.ALL_PHOTOS` global is retired). Leaflet is an npm dep now, not a CDN script. **The whole frontend is now Next** — no static `*.jsx`/`index.html` left at root.
 - **Convergence slice (Tier 1.5 → patron): built.** "Browse by what's in the picture" (header → Browse) — facet filters + 2 exemplar queries (signage · streets mid-change) over the validated 99, a result grid into the existing photo-detail panel (extended with the facets + caption + an "AI-extracted (staff-reviewable)" honesty label). **First LIVE enrichment→patron read** (`/api/patron/facets` → `lib/patron-facets.ts`, read-only on the patron side); the architecture's "patron frontend is genuinely static" is retired *for enrichment only* (catalog read stays a static harvest). Local-first; public-read hardening (read-only role / RLS / rate-limit) deferred to host-on-commit.
+- **Tier-1 normalize + unify (box-scan 99 → first-class photos): built.** `photo_enrichment` gained a **thin identity model** — surrogate PK `id` + `source` discriminator (`contentdm | box_scan`) + `source_id` + nullable `contentdm_id` — so box-scans and ContentDM records share one **unified Photos table**. The 99's confirmed Tier-1 strings are **normalized onto the unified row** (additive, raw kept beside): `description → patron_caption` (`caption_source`), `address → address_raw + lat/lng` (geocode; `geo_source`), `year stamp → year_raw + date_start` (`date_source = archival_stamp`, the pilot honesty valve). A new **Finalize** pipeline stage (`Prep → Ingest → Facet review → Finalize`, `components/scan/finalize.tsx` + `lib/finalize-store.ts`) runs the batch (caption copy · stamp-date parse · geocode → unified write) and hosts the **geocode-miss pin tray** (staff type coordinates → `geo_source = staff_lookup`). Geocoder is OpenStreetMap Nominatim behind a seam (`lib/geocode.ts`, `GEOCODER=none` to disable). The convergence read **collapsed to a single-table read** (`lib/patron-facets.ts` reads the normalized fields directly; scan_review join is fallback-only). Local-only; scope = the 99. **Both views now surface the unified table as one collection:** the staff **Photos list** merges the box-scans on top of the static ContentDM harvest (`/api/staff/photos` → `lib/staff-photos.ts`, adapted via `adaptBoxScanToStaff`) with a **functional Source segmented filter** (All / Box-scan / ContentDM, the first non-cosmetic filter in that bar — keys off `StaffRecord.source`), and the **patron map** plots the geocoded box-scans alongside ContentDM markers (`adaptFacetPhoto` in `components/patron/data.ts`, reading `/api/patron/facets`). Box-scans with no legible year stay in the pool but off the map (same rule as ungeocoded ContentDM).
 - **Legacy prototype files removed.** The superseded staff/scan `*.jsx` and their host HTMLs (`enrichment-app.html`, `enrichment.html`, `mockup.html`), **and the patron prototype (`index.html` + `cleveland-map.jsx` + `desktop-landing.jsx`)**, were deleted once the Next tree replaced them (recoverable from git history); a few `lib/`/`components/` files still carry `// Ported from <name>.jsx` provenance comments. The legacy `scan/*.mjs` were likewise deleted; only `scan/env.mjs` remains, still loaded by the `.ts` CLIs.
 - **Local-by-default in dev:** the DB is **local Postgres** (Postgres.app) and derived JPEGs live on **local disk** (`public/derivatives/`, served at `/derivatives/<chc>.jpg`). Both swap to Supabase (Postgres + Storage) by env vars alone — no code change. Supabase is the deploy target, not a dev dependency.
 - **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
@@ -94,9 +95,13 @@ app/
                             masters (list scans/masters/), ingest/[chcId] (UI-driven, local-only),
                             prep + prep/[chcId] (crop/deskew engine, local-only),
                             facets + facets/[chcId] (Tier 1.5 Run 2 review: reads eval artifact +
-                            staging; on approve graduates facets → photo_enrichment, Stage 0 / 99 only)
+                            staging; on approve graduates facets → photo_enrichment, Stage 0 / 99 only),
+                            finalize + finalize/[chcId] (Finalize stage, local-only: GET worklist,
+                            POST batch-normalize → unified photo_enrichment, POST [chcId] = staff pin)
   api/patron/facets       → convergence slice: LIVE read-only read of the 99 graduated facets
-                            (photo_enrichment ⋈ scan_review), "browse by what's in the picture"
+                            (single-table read of the unified photo_enrichment), "browse by what's in
+                            the picture" + the box-scan markers merged onto the patron map
+  api/staff/photos        → unified box-scan rows for the staff Photos list (read-only; [] if DB down)
   layout.tsx, globals.css
 components/
   patron/                 → landing (DesktopLanding + map overlays), cleveland-map (Leaflet,
@@ -108,13 +113,17 @@ components/
   scan/                   → prep (Prep contact-sheet grid) + prep-editor + prep-flags,
                             pipeline (Ingest surface: worklist sheet + scan-inbox modal), review (B),
                             accuracy (C), ingest (Scan-inbox modal),
-                            facet-review (Tier 1.5 Run 2 A/B review surface — local-only, staging)
+                            facet-review (Tier 1.5 Run 2 A/B review surface — local-only, staging),
+                            finalize (Finalize stage — normalize+unify the 99: batch + geocode-miss pin tray)
 lib/                      → db, scan-store, accuracy, vlm-extract, storage, scan-api,
                             scan-ingest (shared derive→store→VLM→DB core),
                             vlm-facet (Tier 1.5 Run 1 discovery — 3-way sibling to vlm-extract),
                             vlm-run2 (Tier 1.5 Run 2 — Gemini enforced-enum extraction) +
                             facet-review-store (Run 2 review staging + Stage 0 graduation → photo_enrichment),
                             patron-facets (convergence slice — live read-only read of the 99),
+                            finalize-store (Tier-1 normalize+unify: confirmed Tier-1 → unified photo_enrichment) +
+                            geocode (address→coords seam — OSM Nominatim, GEOCODER=none to disable),
+                            staff-photos (box-scan rows for the staff Photos list — /api/staff/photos),
                             prep-engine (drives crop_engine.py) + prep-store + prep-api,
                             tokens, types, normalize-address
 drizzle/                  → schema.ts (source of truth for the DB), migrations/

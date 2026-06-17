@@ -99,6 +99,7 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
         <SidebarItem active={activeSection === "prep"} glyph={<PrepGlyph />} label="Prep" hint="crop · deskew" onClick={() => nav.navigate("scanPrep")} />
         <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Ingest" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
         <SidebarItem active={activeSection === "facets"} glyph={<FacetsGlyph />} label="Facet review" hint="Tier 1.5 · A/B" onClick={() => nav.navigate("scanFacets")} />
+        <SidebarItem active={activeSection === "finalize"} glyph={<FinalizeGlyph />} label="Finalize" hint="normalize · unify" onClick={() => nav.navigate("scanFinalize")} />
         <SidebarItem subtle label="Sync inbox" hint="ContentDM" onClick={() => nav.toast("Sync inbox — existing ContentDM upstream path (not built in this MVP)", "info")} />
 
         <div style={{ flex: 1 }} />
@@ -219,3 +220,4 @@ function VocabGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M2.
 function IngestGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M7 2 V8 M4.5 5.5 L7 8 L9.5 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /><path d="M2.5 9.5 V11.5 H11.5 V9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
 function PrepGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M4.5 1.5 V9.5 H12.5 M1.5 4.5 H9.5 V12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
 function FacetsGlyph() { return <svg viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="2" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="2" y="7.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="0.8" stroke="currentColor" strokeWidth="1.2" /></svg>; }
+function FinalizeGlyph() { return <svg viewBox="0 0 14 14" fill="none"><path d="M7 1.5 C4 5 2.5 7 2.5 9 a4.5 4.5 0 0 0 9 0 c0-2-1.5-4-4.5-7.5 Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /><circle cx="7" cy="9" r="1.1" fill="currentColor" /></svg>; }

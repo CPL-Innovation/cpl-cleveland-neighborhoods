@@ -133,6 +133,8 @@ export interface FacetPhoto {
   year: number | null;
   address: string | null;
   caption: string | null;
+  lat: number | null; // normalized (Finalize stage) — null until geocoded/pinned
+  lng: number | null;
   facets: Run2Facets;
 }
 

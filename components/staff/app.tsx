@@ -4,8 +4,9 @@
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
 import {
-  NavContext, SAMPLE_RECORDS, adaptHarvestedToStaff,
+  NavContext, SAMPLE_RECORDS, adaptHarvestedToStaff, adaptBoxScanToStaff,
   useNav, type NavCtx, type StaffRecord, type ToastTone, type NavigateOpts,
+  type BoxScanStaffPhoto,
 } from "@/components/staff/nav";
 import { StaffShell } from "@/components/staff/shell";
 import { StaffHome } from "@/components/staff/home";
@@ -17,6 +18,7 @@ import { ScanPipeline } from "@/components/scan/pipeline";
 import { ScanReview } from "@/components/scan/review";
 import { ScanAccuracy } from "@/components/scan/accuracy";
 import { ScanFacetReview } from "@/components/scan/facet-review";
+import { ScanFinalize } from "@/components/scan/finalize";
 
 const VIEWS: Record<string, { section: string; title: string; meta: string }> = {
   home: { section: "home", title: "Home", meta: "WELCOME · BRIAN MEGGITT" },
@@ -31,6 +33,7 @@ const VIEWS: Record<string, { section: string; title: string; meta: string }> = 
   scanReview: { section: "ingest", title: "Review & interpret", meta: "SCAN PIPELINE · SCAN REVIEW" },
   scanAccuracy: { section: "ingest", title: "Accuracy", meta: "SCAN PIPELINE · EVAL" },
   scanFacets: { section: "facets", title: "Facet review", meta: "SCAN PIPELINE · TIER 1.5 A/B" },
+  scanFinalize: { section: "finalize", title: "Finalize", meta: "SCAN PIPELINE · NORMALIZE & UNIFY" },
 };
 
 interface Toast { id: string; text: string; tone: ToastTone }
@@ -63,18 +66,26 @@ export function StaffApp() {
   const [recordId, setRecordId] = React.useState<string>(SAMPLE_RECORDS[0].id);
   const [scanId, setScanId] = React.useState<string | null>(null);
 
+  // Merge two sources into the unified Photos list: the box-scan rows from the unified
+  // photo_enrichment store (live DB read) on top of the static ContentDM harvest snapshot.
   React.useEffect(() => {
     let cancelled = false;
-    fetch("/data/tier3-all/records.json")
+    const harvest = fetch("/data/tier3-all/records.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("records.json missing"))))
-      .then((raw: Parameters<typeof adaptHarvestedToStaff>[0][]) => {
-        if (cancelled) return;
-        const adapted = raw.map(adaptHarvestedToStaff);
-        setRecords(adapted);
-        if (adapted.length) setRecordId(adapted[0].id);
-        console.log(`[harvest] loaded ${adapted.length} records into the enrichment app`);
-      })
-      .catch((err) => console.warn("[harvest] using SAMPLE_RECORDS fallback:", err.message));
+      .then((raw: Parameters<typeof adaptHarvestedToStaff>[0][]) => raw.map(adaptHarvestedToStaff))
+      .catch((err) => { console.warn("[harvest] using SAMPLE_RECORDS fallback:", err.message); return SAMPLE_RECORDS; });
+    const boxScans = fetch("/api/staff/photos")
+      .then((r) => (r.ok ? r.json() : { photos: [] }))
+      .then((d: { photos: BoxScanStaffPhoto[] }) => (d.photos || []).map(adaptBoxScanToStaff))
+      .catch(() => [] as StaffRecord[]);
+
+    Promise.all([harvest, boxScans]).then(([harvested, box]) => {
+      if (cancelled) return;
+      const merged = [...box, ...harvested]; // box-scans first — they're the active pilot worklist
+      setRecords(merged);
+      if (merged.length) setRecordId(merged[0].id);
+      console.log(`[photos] ${box.length} box-scan + ${harvested.length} ContentDM = ${merged.length} unified`);
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -132,6 +143,7 @@ export function StaffApp() {
         {view === "scanReview" && <ScanReview />}
         {view === "scanAccuracy" && <ScanAccuracy />}
         {view === "scanFacets" && <ScanFacetReview />}
+        {view === "scanFinalize" && <ScanFinalize />}
       </StaffShell>
       <Toaster toasts={toasts} />
     </NavContext.Provider>

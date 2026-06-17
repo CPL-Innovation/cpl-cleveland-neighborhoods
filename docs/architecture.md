@@ -61,11 +61,13 @@ The staff app is one client SPA (`components/staff/app.tsx`, mounted at `app/sta
 Views are switched by `NavContext` state (`components/staff/nav.tsx`), not URL routes.
 
 - **Home / Photos / Record-edit / Stories** — the enrichment interface (`components/staff/*`). Photos/record-edit read harvested records from `public/data/tier3-all/records.json`; edits there are not yet persisted (enrichment-store write-back is future work via `photo_enrichment`).
-- **Scan pipeline** (sidebar section) — the scan surfaces (`components/scan/*`); stage order Prep → Ingest → Review:
+- **Scan pipeline** (sidebar section) — the scan surfaces (`components/scan/*`); stage order Prep → Ingest → Review → Accuracy, plus Facet review and Finalize:
   - **Prep · crop & deskew** — the first stage (`components/scan/prep.tsx` + `prep-editor.tsx`): a **contact-sheet grid** that runs the OpenCV engine over `scans/raw/`, flags risky crops, lets a librarian hand-fix a box (drag/resize/rotate), and on approve writes `scans/masters/<CHC>.tif` for the rest of the pipeline. Local-only. See [`technical/prep-surface.md`](../technical/prep-surface.md).
   - **Ingest** (Surface A · `pipeline.tsx`) — a **worklist sheet** of every ingested photo (thumbnail · stage · VLM read · review verdicts), modeled on the Photos sheet: filter tabs, a health-rollup footer, itemized failures with per-photo re-attempt. Hosts the two ingest controls: **Ingest ↓** opens the **Scan inbox** (`components/scan/ingest.tsx` — browse `scans/masters/`, ingest new photos with live progress), and row selection → **Remove from pipeline** (un-ingest).
   - **Surface B · review** — the heart: zoomable image + address/year (`correct`/`edit`/`illegible`) + description (`accept`/`edit`/`reject`) + notes. Auto-saves to the API.
   - **Surface C · accuracy** — the eval rollup (illegible excluded from the denominator) + CSV export.
+  - **Facet review** (`components/scan/facet-review.tsx`) — Tier 1.5 Run 2 A/B review; on approve, graduates the enforced-schema facets to `photo_enrichment` (Stage 0, validated 99). Local-only, staging-backed.
+  - **Finalize** (`components/scan/finalize.tsx`) — the terminal box-scan stage (Tier-1 normalize+unify): a batch button normalizes the confirmed Tier-1 fields (caption · stamp-date · geocode) into the **unified `photo_enrichment` table** (`source = box_scan`), with a geocode-miss **pin tray** (`geo_source = staff_lookup`). Local-only. After this, box-scans surface in the staff **Photos list** (source filter: All / Box-scan / ContentDM) and on the patron map alongside ContentDM.
 
 Shared chrome in `components/staff/shell.tsx`; shared primitives in `components/staff/ui.tsx`.
 

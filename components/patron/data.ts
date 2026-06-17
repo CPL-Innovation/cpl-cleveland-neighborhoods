@@ -224,6 +224,34 @@ export function adaptHarvestedRecord(rec: HarvestedRecord): Photo | null {
   };
 }
 
+// Adapt a unified box-scan photo (from /api/patron/facets — the normalized 99) onto the map.
+// Requires real coordinates (set by the Finalize stage's geocode/pin) + a usable year; the rest
+// stay in the pool but off the map, exactly like ungeocoded ContentDM records. The honesty label
+// (aiExtracted) travels with it since caption/facets are AI-extracted + staff-reviewable.
+export function adaptFacetPhoto(fp: import("@/lib/types").FacetPhoto): Photo | null {
+  if (fp.lat == null || fp.lng == null) return null;
+  if (!Number.isFinite(fp.year ?? NaN)) return null;
+  const { x, y } = projectLatLng(fp.lat, fp.lng);
+  return {
+    id: `box-${fp.chc_id}`,
+    x, y,
+    year: fp.year as number,
+    title: fp.address || fp.chc_id,
+    neighborhood: "Cleveland · City Hall box",
+    address: fp.address || "",
+    photographer: "unknown",
+    rights: "CPL — display only",
+    branch: "Cleveland Public Library",
+    note: null,
+    thumb: fp.jpeg_url,
+    lat: fp.lat,
+    lng: fp.lng,
+    facets: fp.facets,
+    caption: fp.caption,
+    aiExtracted: true,
+  };
+}
+
 // The curated demo pool — the landing fetches + merges harvested records on top of this.
 export const CURATED_PHOTOS: Photo[] = [...CLEVELAND_PHOTOS, ...MILLIONAIRES_ROW];
 

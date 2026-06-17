@@ -51,14 +51,30 @@ export const scanReview = pgTable("scan_review", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-// 1:1 with a ContentDM record (or, for box-scans, keyed by CHC ID). Full field list from
-// technical/enrichment-schema.md. Controlled-vocab FKs are plain text for now (vocab tables deferred).
+// 1:1 with a PHOTO — a ContentDM record OR a box-scan (thin identity model, tier1-normalize-unify
+// slice). Full field list from build/data-backend/enrichment-schema.md. Controlled-vocab FKs are
+// plain text for now (vocab tables deferred).
+//
+// Identity (tier1-normalize-unify-spec §"Part B"): a SURROGATE PK (`id`) so box-scans and ContentDM
+// records share one table; a `source` discriminator (`contentdm | box_scan`); `sourceId` = the
+// natural key within that source (CHC ID for box-scans, the doc id for ContentDM); and a nullable
+// `contentdmId` (null for box-scans — the slot exists so one could be linked if ever cataloged).
+// No reconciliation machinery — box ingestion is pilot-only.
 export const photoEnrichment = pgTable("photo_enrichment", {
-  contentdmId: text("contentdm_id").primaryKey(),
+  id: text("id").primaryKey(), // surrogate PK: CHC ID for box-scans, contentdm doc id for ContentDM
+  source: text("source").notNull().default("contentdm"), // contentdm | box_scan
+  sourceId: text("source_id"), // natural key within source (CHC ID for box-scans)
+  contentdmId: text("contentdm_id"), // nullable — null for box-scans
   contentdmUrl: text("contentdm_url"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   sourceRecordHash: text("source_record_hash"),
   enrichmentVersion: integer("enrichment_version").default(1),
+  // Normalized Tier-1 strings (tier1-normalize-unify-spec §"Part A" — additive, never lossy: the
+  // raw transcription is kept beside the normalized field, and *_source records provenance).
+  addressRaw: text("address_raw"), // the confirmed Tier-1 address string (archival evidence)
+  yearRaw: text("year_raw"), // the confirmed Tier-1 year/stamp string
+  captionSource: text("caption_source"), // e.g. "vlm_tier1"
+  dateSource: text("date_source"), // e.g. "archival_stamp" (the honesty valve for the pilot)
   // Geo
   lat: numeric("lat"),
   lng: numeric("lng"),
