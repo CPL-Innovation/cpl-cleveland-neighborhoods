@@ -3,7 +3,7 @@
 import type { ScanRecord, AccuracyRollup } from "@/lib/types";
 import type { MasterEntry, IngestResult } from "@/lib/scan-ingest";
 import type { FacetReviewRow, FacetReviewEntry, FacetReviewPatch } from "@/lib/facet-review-store";
-import type { FinalizeRow, FinalizeState, FinalizeRunResult } from "@/lib/finalize-store";
+import type { FinalizeRow, FinalizeCounts, FinalizeRunResult } from "@/lib/finalize-store";
 
 export const scanApi = {
   async list(): Promise<ScanRecord[]> {
@@ -87,7 +87,7 @@ export const scanApi = {
   },
 
   // ── Finalize stage (Tier-1 normalize + unify; local-only) ──
-  async finalizeList(): Promise<{ rows: FinalizeRow[]; counts: Record<FinalizeState | "reviewed" | "total", number> }> {
+  async finalizeList(): Promise<{ rows: FinalizeRow[]; counts: FinalizeCounts }> {
     const r = await fetch("/api/scan/finalize");
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));

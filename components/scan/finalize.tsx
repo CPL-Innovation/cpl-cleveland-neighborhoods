@@ -16,9 +16,9 @@ import { describeBearing } from "@/lib/rephoto";
 import { useNav } from "@/components/staff/nav";
 import { pillBtn, inputStyle, textareaStyle } from "@/components/staff/ui";
 import { scanApi } from "@/lib/scan-api";
-import type { FinalizeRow, FinalizeState } from "@/lib/finalize-store";
+import type { FinalizeRow, FinalizeState, FinalizeCounts } from "@/lib/finalize-store";
 
-type Counts = Record<FinalizeState | "reviewed" | "total", number>;
+type Counts = FinalizeCounts;
 
 const STATE_LABEL: Record<FinalizeState, { label: string; tone: (t: typeof STAFF_TOKENS) => string }> = {
   pending: { label: "pending", tone: (t) => t.inkFaint },
@@ -99,6 +99,10 @@ export function ScanFinalize() {
               <> · <span style={{ color: t.terracotta, fontWeight: 600 }}>{counts?.needs_pin}</span> awaiting pins</>
             )}
             {pending > 0 && <> · <span style={{ color: t.inkMuted }}>{pending} pending</span></>}
+            {" · "}
+            <span style={{ color: (counts?.viewpoints ?? 0) > 0 ? t.teal : t.inkMuted }}>
+              {counts?.viewpoints ?? 0} then &amp; now
+            </span>
           </div>
         </div>
         <button
@@ -132,7 +136,12 @@ export function ScanFinalize() {
                   <div style={{ fontSize: 12, color: t.ink, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {r.address || r.chc_id}
                   </div>
-                  <div style={{ fontFamily: t.mono, fontSize: 9.5, color: s.tone(t) }}>{s.label}</div>
+                  <div style={{ fontFamily: t.mono, fontSize: 9.5, color: s.tone(t), display: "flex", alignItems: "center", gap: 6 }}>
+                    <span>{s.label}</span>
+                    {r.rephoto_embed_url && (
+                      <span title="then & now viewpoint recorded" style={{ color: t.teal }}>◉ now</span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -155,6 +164,13 @@ export function ScanFinalize() {
                 </Section>
 
                 <Section t={t} label="Normalized (the outputs)">
+                  <KV
+                    t={t}
+                    k="then & now"
+                    v={active.rephoto_embed_url
+                      ? `viewpoint recorded${active.rephoto_bearing != null ? ` · facing ${describeBearing(active.rephoto_bearing)}` : ""}`
+                      : "—"}
+                  />
                   <KV t={t} k="date_start" v={active.date_start ? `${active.date_start}  ·  archival_stamp` : "—"} />
                   <KV
                     t={t}

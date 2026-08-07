@@ -63,6 +63,8 @@ export function parseStampDate(yearRaw: string): { dateStart: string; precision:
 
 // ── List shape for the Finalize surface ──
 export type FinalizeState = "pending" | "finalized" | "needs_pin";
+/** `viewpoints` = how many have a then-and-now recorded — the curation progress signal. */
+export type FinalizeCounts = Record<FinalizeState | "reviewed" | "total" | "viewpoints", number>;
 export interface FinalizeRow {
   chc_id: string;
   jpeg_url: string;
@@ -120,7 +122,7 @@ function deriveState(u: UnifiedRow | undefined): FinalizeState {
 }
 
 /** The Finalize worklist: every reviewed box-scan, with its normalize/pin state. */
-export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Record<FinalizeState | "reviewed" | "total", number> }> {
+export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: FinalizeCounts }> {
   const { listRecords } = await import("@/lib/scan-store");
   const [records, unified] = await Promise.all([listRecords(), unifiedBoxScans()]);
   const reviewed = records.filter((r) => r.review?.status === "reviewed");
@@ -155,7 +157,8 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Rec
     pending: rows.filter((r) => r.state === "pending").length,
     finalized: rows.filter((r) => r.state === "finalized").length,
     needs_pin: rows.filter((r) => r.state === "needs_pin").length,
-  } as Record<FinalizeState | "reviewed" | "total", number>;
+    viewpoints: rows.filter((r) => r.rephoto_embed_url).length,
+  } as FinalizeCounts;
 
   return { rows, counts };
 }

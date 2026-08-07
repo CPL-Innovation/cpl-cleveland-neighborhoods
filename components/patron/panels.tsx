@@ -157,6 +157,10 @@ export function PhotoDetailPanel({
   // viewpoint means no toggle: offering "Now" and showing a placeholder would be a promise the
   // panel can't keep.
   const rephotoUrl = photo.rephotoEmbedUrl || null;
+  // `year` is 0 for an undated box-scan (the adapters' sentinel — Photo.year is a number the
+  // map filters on, so it can't be null). Never print the sentinel: an undated print must read
+  // as undated, not as the year zero.
+  const dated = Number.isFinite(photo.year) && photo.year > 0;
   const [view, setView] = React.useState<"then" | "now">("then");
   React.useEffect(() => { if (!rephotoUrl) setView("then"); }, [rephotoUrl, photo.id]);
 
@@ -179,7 +183,7 @@ export function PhotoDetailPanel({
           <div style={{
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#6B6359",
-          }}>Photo · {photo.year}</div>
+          }}>{dated ? `Photo · ${photo.year}` : "Photo · date unknown"}</div>
           <button onClick={onClose} style={{
             background: "none", border: "none", cursor: "pointer",
             fontSize: 20, lineHeight: 1, color: "#6B6359",
@@ -223,7 +227,7 @@ export function PhotoDetailPanel({
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 10, color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
               padding: "4px 8px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase",
-            }}>{`Then · ${photo.year}`}</div>}
+            }}>{dated ? `Then · ${photo.year}` : "Then"}</div>}
 
             <div style={{
               position: "absolute", bottom: 12, left: 12, display: "flex",
@@ -281,7 +285,7 @@ export function PhotoDetailPanel({
             padding: "0 18px", display: "grid", gridTemplateColumns: "110px 1fr",
             rowGap: 8, columnGap: 12, fontSize: 13, color: "#3D3833",
           }}>
-            <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || `c. ${photo.year}`}</MetaValue>
+            <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || (dated ? `c. ${photo.year}` : "no legible date stamp")}</MetaValue>
             <MetaLabel>Photographer</MetaLabel><MetaValue>{photo.photographer}</MetaValue>
             <MetaLabel>Address</MetaLabel><MetaValue>{photo.address}</MetaValue>
             <MetaLabel>Neighborhood</MetaLabel><MetaValue>{photo.neighborhood}</MetaValue>
