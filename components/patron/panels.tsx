@@ -4,6 +4,7 @@
 // window.ALL_PHOTOS); the story trail reads MILLIONAIRES_ROW directly.
 import React from "react";
 import { MILLIONAIRES_ROW, type Photo } from "./data";
+import { siblingsOf, yearSpan } from "@/lib/patron-places";
 
 export function SearchIcon({ size = 14, color = "#3D3833" }: { size?: number; color?: string }) {
   return (
@@ -146,7 +147,15 @@ export function PhotoDetailPanel({
 }) {
   // Neighbors-in-time: within ~80 viewBox units AND ±8 years. Skipped for the faceted 99
   // (they aren't map-placed — the convergence slice opens them from the browse grid).
-  const neighbors = photo.facets ? [] : photos.filter((p) =>
+  // Repeat visits to this exact corner. Grouping is by coordinate rather than by proximity —
+  // these are the *same address* photographed again, which is a stronger claim than "nearby",
+  // and it's what the map now puts behind a single dot (lib/patron-places.ts).
+  const corner = siblingsOf(photo, photos);
+  const hasSequence = corner.length > 1;
+
+  // Proximity neighbours are a weaker relation than the corner sequence above — suppress them
+  // when this photo already has one, so the panel doesn't show two overlapping "related" lists.
+  const neighbors = (photo.facets || hasSequence) ? [] : photos.filter((p) =>
     p.id !== photo.id &&
     Math.hypot(p.x - photo.x, p.y - photo.y) < 80 &&
     Math.abs(p.year - photo.year) <= 8
@@ -161,6 +170,7 @@ export function PhotoDetailPanel({
   // map filters on, so it can't be null). Never print the sentinel: an undated print must read
   // as undated, not as the year zero.
   const dated = Number.isFinite(photo.year) && photo.year > 0;
+
   const [view, setView] = React.useState<"then" | "now">("then");
   React.useEffect(() => { if (!rephotoUrl) setView("then"); }, [rephotoUrl, photo.id]);
 
@@ -265,6 +275,56 @@ export function PhotoDetailPanel({
               {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}\u00B0` : ""}
               <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 3 }}>
                 Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
+              </div>
+            </div>
+          )}
+
+          {hasSequence && (
+            <div style={{ margin: "14px 18px 0" }}>
+              <div style={{
+                fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10,
+                letterSpacing: 1, textTransform: "uppercase", color: "#6B6359", marginBottom: 8,
+              }}>
+                This corner · {corner.length} photographs{yearSpan(corner) ? ` · ${yearSpan(corner)}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {corner.map((c) => {
+                  const isCurrent = c.id === photo.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => !isCurrent && onOpenPhoto(c)}
+                      title={c.year > 0 ? String(c.year) : "date unknown"}
+                      style={{
+                        flex: "0 0 auto", width: 78, padding: 0, cursor: isCurrent ? "default" : "pointer",
+                        background: "transparent", textAlign: "left",
+                        border: isCurrent ? "2px solid #1A1814" : "1px solid #D6CDBD",
+                        borderRadius: 5, overflow: "hidden", opacity: isCurrent ? 1 : 0.82,
+                      }}
+                    >
+                      <div style={{ position: "relative", height: 52, background: "#1A1814" }}>
+                        {c.thumb && (
+                          <img src={c.thumb} alt="" style={{
+                            position: "absolute", inset: 0, width: "100%", height: "100%",
+                            objectFit: "cover", display: "block",
+                          }} />
+                        )}
+                        {/* a sibling that already has a modern viewpoint framed */}
+                        {c.rephotoEmbedUrl && (
+                          <span title="then & now available" style={{
+                            position: "absolute", top: 3, right: 3, width: 6, height: 6,
+                            borderRadius: "50%", background: "#E9E186", boxShadow: "0 0 0 1.5px rgba(26,24,20,0.5)",
+                          }} />
+                        )}
+                      </div>
+                      <div style={{
+                        fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 9.5,
+                        padding: "3px 5px", color: isCurrent ? "#1A1814" : "#6B6359",
+                        background: isCurrent ? "#F1ECE2" : "#fff",
+                      }}>{c.year > 0 ? c.year : "—"}</div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
