@@ -49,6 +49,8 @@ export async function listFacetPhotos(): Promise<FacetPhoto[]> {
       captionSource: photoEnrichment.captionSource,
       lat: photoEnrichment.lat,
       lng: photoEnrichment.lng,
+      rephotoEmbedUrl: photoEnrichment.rephotoEmbedUrl,
+      rephotoBearing: photoEnrichment.rephotoBearing,
     })
     .from(photoEnrichment)
     .where(isNotNull(photoEnrichment.facetsReviewedAt));
@@ -86,6 +88,8 @@ export async function listFacetPhotos(): Promise<FacetPhoto[]> {
         lat: e.lat != null ? Number(e.lat) : null,
         lng: e.lng != null ? Number(e.lng) : null,
         facets: e.facets as Run2Facets,
+        rephoto_embed_url: e.rephotoEmbedUrl ?? null,
+        rephoto_bearing: e.rephotoBearing != null ? Number(e.rephotoBearing) : null,
       };
     })
     .sort((a, b) => a.chc_id.localeCompare(b.chc_id));

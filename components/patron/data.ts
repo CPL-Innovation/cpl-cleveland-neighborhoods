@@ -30,6 +30,9 @@ export interface Photo {
   facets?: import("@/lib/types").Run2Facets;
   caption?: string | null;
   aiExtracted?: boolean; // render the "AI-extracted (staff-reviewable)" honesty label
+  /** Then-and-now: the Street View viewpoint a librarian framed to match this photograph. */
+  rephotoEmbedUrl?: string | null;
+  rephotoBearing?: number | null;
 }
 
 // A raw Tier-3 harvested record (data/tier3-all/records.json). Loose by design.
@@ -249,6 +252,8 @@ export function adaptFacetPhoto(fp: import("@/lib/types").FacetPhoto): Photo | n
     facets: fp.facets,
     caption: fp.caption,
     aiExtracted: true,
+    rephotoEmbedUrl: fp.rephoto_embed_url ?? null,
+    rephotoBearing: fp.rephoto_bearing ?? null,
   };
 }
 

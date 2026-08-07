@@ -12,8 +12,9 @@
 // Local-only (geocoding hits the network from a local job); the API 403s in serverless.
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
+import { describeBearing } from "@/lib/rephoto";
 import { useNav } from "@/components/staff/nav";
-import { pillBtn, inputStyle } from "@/components/staff/ui";
+import { pillBtn, inputStyle, textareaStyle } from "@/components/staff/ui";
 import { scanApi } from "@/lib/scan-api";
 import type { FinalizeRow, FinalizeState } from "@/lib/finalize-store";
 
@@ -163,6 +164,7 @@ export function ScanFinalize() {
                 </Section>
 
                 {active.state === "needs_pin" && <PinTray t={t} row={active} onSaved={load} nav={nav} />}
+                {active.state === "finalized" && <RephotoTray t={t} row={active} onSaved={load} nav={nav} />}
 
                 {active.state === "pending" && (
                   <div style={{ marginTop: 16, fontSize: 12.5, color: t.inkMuted, lineHeight: 1.5 }}>
@@ -238,6 +240,85 @@ function PinTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Finali
       <a href={lookupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: t.teal }}>
         ↗ Find coordinates for “{row.address || row.chc_id}” on OpenStreetMap
       </a>
+    </div>
+  );
+}
+
+/**
+ * Then-and-now: record the modern viewpoint.
+ *
+ * The librarian walks Street View to where the photographer stood, frames the shot to match,
+ * then pastes Google's "Share → Embed a map" URL. We keep the URL and unpack its camera
+ * geometry (see lib/rephoto.ts) — the bearing read-back below is the check that the framing
+ * is the one they meant, without having to trust an opaque string.
+ */
+function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: FinalizeRow; onSaved: () => void; nav: ReturnType<typeof useNav> }) {
+  const [url, setUrl] = React.useState(row.rephoto_embed_url ?? "");
+  const [saving, setSaving] = React.useState(false);
+  React.useEffect(() => setUrl(row.rephoto_embed_url ?? ""), [row.chc_id, row.rephoto_embed_url]);
+
+  const recorded = !!row.rephoto_embed_url;
+  const dirty = url.trim() !== (row.rephoto_embed_url ?? "");
+  // The archival coordinate is the subject; Street View opens there so the walk starts at the corner.
+  const streetViewUrl =
+    row.lat != null && row.lng != null
+      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${row.lat},${row.lng}`
+      : null;
+
+  const save = async (next: string) => {
+    setSaving(true);
+    try {
+      const res = await scanApi.finalizeRephoto(row.chc_id, next);
+      nav.toast(
+        res.cleared
+          ? `Cleared the viewpoint for ${row.chc_id}`
+          : `Viewpoint saved · facing ${res.bearing != null ? describeBearing(res.bearing) : "—"}`,
+        "ok",
+      );
+      onSaved();
+    } catch (e) {
+      nav.toast((e as Error).message, "warn");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16, padding: 14, border: `1px solid ${t.border}`, background: t.bgSurface, borderRadius: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 12.5, color: t.ink, fontWeight: 500 }}>Then &amp; now — the modern viewpoint</span>
+        {recorded && (
+          <span style={{ fontFamily: t.mono, fontSize: 10, color: t.sage, background: t.sageSoft, padding: "2px 7px", borderRadius: 3 }}>
+            recorded{row.rephoto_bearing != null ? ` · facing ${describeBearing(row.rephoto_bearing)}` : ""}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 11.5, color: t.inkMuted, lineHeight: 1.5, marginBottom: 8 }}>
+        Stand where the photographer stood, match the framing, then paste Google&rsquo;s{" "}
+        <b>Share &rarr; Embed a map</b> link. The whole <code>&lt;iframe&gt;</code> is fine — we&rsquo;ll take the URL out of it.
+      </div>
+      <textarea
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        placeholder="https://www.google.com/maps/embed?pb=…"
+        rows={2}
+        style={{ ...textareaStyle(t), fontFamily: t.mono, fontSize: 10.5, marginBottom: 8 }}
+      />
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => save(url)} disabled={!dirty || saving} style={{ ...pillBtn(t, true), opacity: !dirty || saving ? 0.5 : 1 }}>
+          {saving ? "Saving…" : recorded ? "Update viewpoint" : "Save viewpoint"}
+        </button>
+        {recorded && (
+          <button onClick={() => { setUrl(""); save(""); }} disabled={saving} style={{ ...pillBtn(t) }}>
+            Clear
+          </button>
+        )}
+        {streetViewUrl && (
+          <a href={streetViewUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: t.teal }}>
+            ↗ Open Street View at this address
+          </a>
+        )}
+      </div>
     </div>
   );
 }

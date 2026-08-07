@@ -152,7 +152,13 @@ export function PhotoDetailPanel({
     Math.abs(p.year - photo.year) <= 8
   ).slice(0, 5);
 
+  // Then-and-now. The "now" is a Street View viewpoint a librarian framed by hand to match the
+  // photographer's position — so it only exists where someone has done that work. No recorded
+  // viewpoint means no toggle: offering "Now" and showing a placeholder would be a promise the
+  // panel can't keep.
+  const rephotoUrl = photo.rephotoEmbedUrl || null;
   const [view, setView] = React.useState<"then" | "now">("then");
+  React.useEffect(() => { if (!rephotoUrl) setView("then"); }, [rephotoUrl, photo.id]);
 
   return (
     <>
@@ -194,24 +200,37 @@ export function PhotoDetailPanel({
                 objectFit: "contain", display: "block",
               }} />
             )}
-            <div style={{
+            {view === "now" && rephotoUrl && (
+              <iframe
+                key={photo.id}
+                src={rephotoUrl}
+                title={`Street View looking at ${photo.address || photo.title} today`}
+                loading="lazy"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+              />
+            )}
+            {view === "then" && <div style={{
               position: "absolute", inset: 0,
               background: "linear-gradient(180deg, rgba(26,24,20,0) 50%, rgba(26,24,20,0.45) 100%)",
               pointerEvents: "none",
-            }} />
-            <div style={{
+            }} />}
+            {/* Only over the archival image: Google's embed puts its own address card top-left,
+                and the Then/Now toggle plus the attribution line below already say which is which. */}
+            {view === "then" && <div style={{
               position: "absolute", top: 10, left: 12,
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 10, color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
               padding: "4px 8px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase",
-            }}>{view === "then" ? `Then · ${photo.year}` : "Now · 2026"}</div>
+            }}>{`Then · ${photo.year}`}</div>}
 
             <div style={{
               position: "absolute", bottom: 12, left: 12, display: "flex",
               background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 999,
               overflow: "hidden", boxShadow: "0 2px 8px rgba(26,24,20,0.15)",
             }}>
-              {(["then", "now"] as const).map((m) => (
+              {(rephotoUrl ? (["then", "now"] as const) : (["then"] as const)).map((m) => (
                 <button key={m} onClick={() => setView(m)} style={{
                   padding: "6px 14px",
                   background: view === m ? "#1A1814" : "transparent",
@@ -227,8 +246,24 @@ export function PhotoDetailPanel({
               position: "absolute", bottom: 12, right: 12,
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 10, color: "#fff", opacity: 0.85,
-            }}>scroll to zoom</div>
+            }}>{view === "then" ? "scroll to zoom" : ""}</div>
           </div>
+
+          {/* Whose image is this? The archival print is CPL's; the "now" is Google's, and the
+              viewpoint is a librarian's judgement about where the photographer stood. Say so —
+              the same contract the AI-extracted label keeps elsewhere in this panel. */}
+          {view === "now" && rephotoUrl && (
+            <div style={{
+              margin: "-6px 18px 0", fontSize: 11, lineHeight: 1.5, color: "#6B6359",
+              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            }}>
+              Imagery &copy; Google Street View · viewpoint matched to the photograph by CPL staff
+              {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}\u00B0` : ""}
+              <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 3 }}>
+                Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
+              </div>
+            </div>
+          )}
 
           <div style={{ padding: "0 18px 0" }}>
             <div style={{

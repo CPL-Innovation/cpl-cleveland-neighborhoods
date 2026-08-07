@@ -115,4 +115,18 @@ export const scanApi = {
     }
     return r.json();
   },
+
+  /** Record (or clear, with "") the then-and-now viewpoint a librarian framed in Street View. */
+  async finalizeRephoto(id: string, rephotoEmbedUrl: string): Promise<{ ok: boolean; cleared: boolean; bearing: number | null }> {
+    const r = await fetch(`/api/scan/finalize/${encodeURIComponent(id)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rephotoEmbedUrl }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      throw new Error(e.error || `rephoto ${r.status}`);
+    }
+    return r.json();
+  },
 };
