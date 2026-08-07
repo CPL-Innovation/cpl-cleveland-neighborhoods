@@ -357,8 +357,9 @@ function ActivityRow({ who, verb, what, when, tone, last }: {
 }) {
   const t = STAFF_TOKENS;
   const toneColor = ({
-    story: t.teal, upload: t.sage, curate: t.ochre,
-    edit: t.draft, contrib: t.terracotta, self: t.ink,
+    // Rendered as a bare 4px dot — base fills, no text to keep legible.
+    story: t.teal, upload: t.sageBase, curate: t.ochreBase,
+    edit: t.draftBase, contrib: t.terracotta, self: t.ink,
   } as Record<string, string>)[tone] || t.inkMuted;
   return (
     <div style={{
