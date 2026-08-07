@@ -2,10 +2,17 @@
 
 Project spine for both humans and Claude Code. This is a **reference** doc — present-tense
 "how it works now," kept in sync with the code. For the *why/what* behind decisions, read the
-design specs in the **Obsidian design vault** (`…/Second Brain/01 Develop/CPL Cleveland
-Neighborhoods/build/`, entry point `build/BUILD-SPEC.md`) — these moved out of the repo's old
-`technical/` folder and are now read-only design intent (the repo stays the source of truth for
-*implementation*; intent changes route back via `build/_FROM-BUILD.md`).
+design specs in the **Obsidian design vault** — `…/iCloud~md~obsidian/Documents/Projects/01
+Develop/CPL Cleveland Neighborhoods/build/`, entry point `build/BUILD-SPEC.md`. These moved out
+of the repo's old `technical/` folder and are now read-only design intent (the repo stays the
+source of truth for *implementation*; intent changes route back via `build/_FROM-BUILD.md`).
+
+> ⚠️ **Four sibling vaults share that `01 Develop/` parent**, each with its own `BUILD-SPEC.md`
+> and its own `_FROM-BUILD.md` valve: **CPL Cleveland Neighborhoods** (this app), **CPL Design
+> System** (`@cpl/tokens` + `@cpl/ui`), **CPL Dateline Cleveland**, and **CPL Self-Guided Tour**.
+> Write back to the vault that owns *the thing you changed*, not the one matching the repo you
+> happen to be sitting in — a token or `HonestyBadge` change is Design System intent even though
+> you reached it from this repo.
 
 ## What this is
 
