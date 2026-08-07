@@ -58,7 +58,9 @@
 ## Design system (an external dependency now)
 
 The staff UI's look is **not defined in this repo**. Two packages own it, both authored in the
-Dateline monorepo (`cpl-dateline-cleveland/packages/*`) and consumed here:
+Dateline monorepo and consumed here. They are checked out at **`../cpl-design-system/packages/*`**
+— a git worktree pinned to the `design-system/cpl-tokens-and-ui` branch, so the design system has
+a stable directory that doesn't move when Dateline's own feature branches switch underneath it:
 
 | Package | What CN takes from it | Seam |
 |---|---|---|
