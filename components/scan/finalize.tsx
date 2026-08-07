@@ -12,7 +12,7 @@
 // Local-only (geocoding hits the network from a local job); the API 403s in serverless.
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
-import { describeBearing } from "@/lib/rephoto";
+import { describeBearing, parseRephotoEmbed } from "@/lib/rephoto";
 import { useNav } from "@/components/staff/nav";
 import { pillBtn, inputStyle, textareaStyle } from "@/components/staff/ui";
 import { scanApi } from "@/lib/scan-api";
@@ -271,10 +271,26 @@ function PinTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Finali
 function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: FinalizeRow; onSaved: () => void; nav: ReturnType<typeof useNav> }) {
   const [url, setUrl] = React.useState(row.rephoto_embed_url ?? "");
   const [saving, setSaving] = React.useState(false);
-  React.useEffect(() => setUrl(row.rephoto_embed_url ?? ""), [row.chc_id, row.rephoto_embed_url]);
+  const [serverError, setServerError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    setUrl(row.rephoto_embed_url ?? "");
+    setServerError(null);
+  }, [row.chc_id, row.rephoto_embed_url]);
 
   const recorded = !!row.rephoto_embed_url;
   const dirty = url.trim() !== (row.rephoto_embed_url ?? "");
+
+  // Validate as they paste, not on the server after the fact. The parser is a pure function,
+  // so the same rule that guards the write can explain itself here — a rejected paste used to
+  // surface only as a 400 and a toast that disappeared, which read as "nothing happened".
+  const check = React.useMemo(() => {
+    if (!url.trim()) return null;
+    try {
+      return { ok: true as const, framing: parseRephotoEmbed(url) };
+    } catch (e) {
+      return { ok: false as const, message: (e as Error).message };
+    }
+  }, [url]);
   // The archival coordinate is the subject; Street View opens there so the walk starts at the corner.
   const streetViewUrl =
     row.lat != null && row.lng != null
@@ -283,6 +299,7 @@ function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Fi
 
   const save = async (next: string) => {
     setSaving(true);
+    setServerError(null);
     try {
       const res = await scanApi.finalizeRephoto(row.chc_id, next);
       nav.toast(
@@ -293,6 +310,8 @@ function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Fi
       );
       onSaved();
     } catch (e) {
+      // Keep it on screen: a toast is the wrong home for something you need while editing.
+      setServerError((e as Error).message);
       nav.toast((e as Error).message, "warn");
     } finally {
       setSaving(false);
@@ -320,8 +339,50 @@ function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Fi
         rows={2}
         style={{ ...textareaStyle(t), fontFamily: t.mono, fontSize: 10.5, marginBottom: 8 }}
       />
+      {check && !check.ok && (
+        <div style={{
+          marginBottom: 8, padding: "8px 10px", borderRadius: 5,
+          background: t.ochreSoft, border: `1px solid ${t.ochre}44`, color: t.ochre,
+          fontSize: 11.5, lineHeight: 1.5,
+        }}>
+          <b>That isn&rsquo;t an embed link.</b> {check.message}
+          <div style={{ color: t.inkMuted, marginTop: 4 }}>
+            In Street View use <b>Share &rarr; Embed a map</b> (not &ldquo;Copy link&rdquo;, and not the address bar) —
+            only that tab gives a URL Google allows us to display.
+          </div>
+        </div>
+      )}
+
+      {check?.ok && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontFamily: t.mono, fontSize: 10.5, color: t.sage, marginBottom: 6 }}>
+            ✓ camera {check.framing.lat?.toFixed(5)}, {check.framing.lng?.toFixed(5)}
+            {check.framing.bearing != null ? ` · facing ${describeBearing(check.framing.bearing)}` : ""}
+            {check.framing.pitch != null ? ` · pitch ${check.framing.pitch.toFixed(1)}°` : ""}
+          </div>
+          {/* Confirm the framing before committing it — the job is matching a photograph. */}
+          <iframe
+            src={check.framing.embedUrl}
+            title="Street View preview"
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+            style={{ width: "100%", height: 150, border: `1px solid ${t.border}`, borderRadius: 5, display: "block" }}
+          />
+        </div>
+      )}
+
+      {serverError && (
+        <div style={{
+          marginBottom: 8, padding: "8px 10px", borderRadius: 5,
+          background: `${t.terracotta}14`, border: `1px solid ${t.terracotta}44`, color: t.terracotta,
+          fontSize: 11.5, lineHeight: 1.5,
+        }}>
+          Save failed — {serverError}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => save(url)} disabled={!dirty || saving} style={{ ...pillBtn(t, true), opacity: !dirty || saving ? 0.5 : 1 }}>
+        <button onClick={() => save(url)} disabled={!dirty || saving || check?.ok === false} style={{ ...pillBtn(t, true), opacity: !dirty || saving || check?.ok === false ? 0.5 : 1 }}>
           {saving ? "Saving…" : recorded ? "Update viewpoint" : "Save viewpoint"}
         </button>
         {recorded && (
