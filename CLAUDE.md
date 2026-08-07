@@ -40,6 +40,8 @@ VLM-reads masters into records, Review captures verdicts (with an Accuracy eval 
 - **DB round-trip verified end-to-end** against local Postgres (`scan:run` → on-disk JPEG store → DB → `/staff` → `/api/scan/*`). `npm run build` (full typecheck) passes.
 - **Prep (crop & deskew): built** — `/staff → Scan pipeline → Prep`. A contact-sheet grid driving an OpenCV engine (`scan/crop_engine.py`, run as a local subprocess) that turns `scans/raw/<CHC>.tif` → `scans/masters/<CHC>.tif`. Local-only like the ingest doors. Verified end-to-end on real CPL scans. Needs `python3` + `cv2`/`numpy` (see Gotchas).
 - **Auth: deferred** (clean seam left).
+- **⚠ Pre-deploy blocker — the shared packages aren't installable.** `@cpl/tokens` and `@cpl/ui` are bridged by **`npm link` and are not in `package.json`**, so a **clean clone of `main` cannot build** (`Cannot find module '@cpl/tokens'`). Four files import them: `lib/tokens.ts`, `components/scan/review.tsx`, `components/scan/facet-review.tsx`, `components/staff/ui.tsx`. Nothing announces this today — there is no CI and no `vercel.json` — so the first thing to notice will be a deploy. **Fix before hosting:** publish both to a registry (npm private / GitHub Packages) or split `packages/*` into their own repo, then declare them as real dependencies and demote `npm link` to a local-dev override. A git dependency won't work — npm can't install a subdirectory of a monorepo.
+
 
 ## Stack
 
