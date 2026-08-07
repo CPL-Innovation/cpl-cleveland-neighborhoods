@@ -9,6 +9,7 @@
 // This surface is the A/B *instrument*, not the verdict: the four scoring questions still gate.
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
+import { HonestyBadge } from "@cpl/ui";
 import { useNav } from "@/components/staff/nav";
 import { pillBtn, FieldGroup, inputStyle } from "@/components/staff/ui";
 import { scanApi } from "@/lib/scan-api";
@@ -202,7 +203,7 @@ export function ScanFacetReview() {
             <div style={{ padding: "16px 22px", maxWidth: 720 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, position: "sticky", top: 0 }}>
                 <div style={{ fontFamily: t.serif, fontSize: 19, color: t.ink }}>{active.chc_id}</div>
-                {dirty && <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.draft }} title="unsaved" />}
+                {dirty && <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.draftBase }} title="unsaved" />}
                 {active.graduated && !dirty && (
                   <span style={{ fontFamily: t.mono, fontSize: 10, color: t.sage, background: t.sageSoft, padding: "2px 7px", borderRadius: 3 }} title="written to photo_enrichment">↑ in production</span>
                 )}
@@ -276,17 +277,26 @@ type RowBase = {
   setField: (k: string, v: unknown) => void;
 };
 
-function FieldShell({ t, label, changed, vlmHint, confidence, children }: {
-  t: typeof STAFF_TOKENS; label: string; changed?: boolean; vlmHint?: string; confidence?: React.ReactNode; children: React.ReactNode;
+// The provenance/review pair — the bespoke `edited` chip and the `VLM: <value>` readout —
+// is now one HonestyBadge (CPL Design System, honesty-badge-spec §Migration). `original` is
+// the machine's value, surfaced as the badge's tooltip.
+//
+// `confidence` stays untouched and deliberately NOT info-toned: confidence is a different
+// claim from provenance, and forcing it into the honesty family would erase that.
+function FieldShell({ t, label, changed, original, confidence, children }: {
+  t: typeof STAFF_TOKENS; label: string; changed?: boolean; original?: string; confidence?: React.ReactNode; children: React.ReactNode;
 }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: t.ink }}>{LABEL(label)}</span>
-        {changed && <span style={{ fontFamily: t.mono, fontSize: 9, color: t.draft, background: t.draftSoft, padding: "1px 5px", borderRadius: 3 }}>edited</span>}
+        <HonestyBadge
+          provenance={{ method: "vlm" }}
+          review={changed ? "reviewed" : "reviewable"}
+          edited={changed}
+          original={original}
+        />
         {confidence}
-        <div style={{ flex: 1 }} />
-        {vlmHint && <span style={{ fontFamily: t.mono, fontSize: 10, color: t.inkFaint }} title="VLM original">VLM: {vlmHint}</span>}
       </div>
       {children}
     </div>
@@ -332,7 +342,7 @@ function SingleRow({ options, confidenceKey, vlm, ...p }: RowBase & { options: s
     <ConfidenceBadge t={t} value={working[confidenceKey] as string | undefined} onChange={(v) => setField(confidenceKey, v || undefined)} />
   ) : undefined;
   return (
-    <FieldShell t={t} label={label} changed={cur !== vlmVal} vlmHint={vlmVal ? LABEL(vlmVal) : "—"} confidence={confidence}>
+    <FieldShell t={t} label={label} changed={cur !== vlmVal} original={vlmVal ? LABEL(vlmVal) : undefined} confidence={confidence}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {options.map((o) => (
           <Chip key={o} t={t} on={cur === o} onClick={() => setField(field, cur === o ? undefined : o)}>{o}</Chip>
@@ -352,7 +362,7 @@ function MultiRow({ options, confidenceKey, vlm, ...p }: RowBase & { options: st
     <ConfidenceBadge t={t} value={working[confidenceKey] as string | undefined} onChange={(v) => setField(confidenceKey, v || undefined)} />
   ) : undefined;
   return (
-    <FieldShell t={t} label={label} changed={changed} vlmHint={vlmVal.length ? String(vlmVal.length) : "—"} confidence={confidence}>
+    <FieldShell t={t} label={label} changed={changed} original={vlmVal.length ? vlmVal.map(LABEL).join(", ") : undefined} confidence={confidence}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {options.map((o) => (
           <Chip key={o} t={t} soft on={cur.includes(o)} onClick={() => toggle(o)}>{o}</Chip>
@@ -368,7 +378,7 @@ function BoolRow({ vlm, ...p }: RowBase & { vlm: Run2Facets }) {
   const vlmVal = (vlm as Record<string, unknown>)[field] as boolean | undefined;
   const states: [string, boolean | undefined][] = [["yes", true], ["no", false], ["—", undefined]];
   return (
-    <FieldShell t={t} label={label} changed={cur !== vlmVal} vlmHint={vlmVal === undefined ? "—" : vlmVal ? "yes" : "no"}>
+    <FieldShell t={t} label={label} changed={cur !== vlmVal} original={vlmVal === undefined ? undefined : vlmVal ? "yes" : "no"}>
       <div style={{ display: "flex", gap: 5 }}>
         {states.map(([lbl, val]) => (
           <Chip key={lbl} t={t} on={cur === val} onClick={() => setField(field, val)}>{lbl}</Chip>
@@ -384,7 +394,7 @@ function TranscriptionRow({ kinds, ...p }: RowBase & { kinds: string[] }) {
   const items = (working[field] as Transcription[] | undefined) ?? [];
   const update = (next: Transcription[]) => setField(field, next.length ? next : undefined);
   return (
-    <FieldShell t={t} label={label} vlmHint={items.length ? String(items.length) : "—"}>
+    <FieldShell t={t} label={label}>
       <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
         {items.map((it, i) => (
           <div key={i} style={{ display: "flex", gap: 5 }}>

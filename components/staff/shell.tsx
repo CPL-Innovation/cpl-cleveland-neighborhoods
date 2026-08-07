@@ -50,27 +50,27 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
   return (
     <aside style={{
       width: 232,
-      background: t.bgInk,
-      color: "#E8DFCE",
+      background: t.bgSidebar,
+      color: t.inkSubtle,
       display: "flex", flexDirection: "column",
-      borderRight: "1px solid rgba(0,0,0,0.2)",
+      borderRight: `1px solid ${t.border}`,
     }}>
       {/* Wordmark */}
       <div style={{
         height: 60, padding: "0 18px",
         display: "flex", alignItems: "center", gap: 10,
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        borderBottom: `1px solid ${t.borderSoft}`,
       }}>
         <div style={{
           width: 22, height: 22, borderRadius: 4,
           background: t.terracotta,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: t.serif, fontWeight: 600, color: "#fff",
+          fontFamily: t.serif, fontWeight: 600, color: t.onFill,
           fontSize: 13, lineHeight: 1,
         }}>CN</div>
         <div style={{ lineHeight: 1.1 }}>
-          <div style={{ fontFamily: t.serif, fontSize: 15.5, fontWeight: 500, letterSpacing: -0.2, color: "#F6F2EB" }}>Cleveland Neighborhoods</div>
-          <div style={{ fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.2, textTransform: "uppercase", color: t.inkFaint, marginTop: 2 } as React.CSSProperties}>Enrichment · Staff</div>
+          <div style={{ fontFamily: t.serif, fontSize: 15.5, fontWeight: 500, letterSpacing: -0.2, color: t.ink }}>Cleveland Neighborhoods</div>
+          <div style={{ fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.2, textTransform: "uppercase", color: t.inkMuted, marginTop: 2 } as React.CSSProperties}>Enrichment · Staff</div>
         </div>
       </div>
 
@@ -81,7 +81,7 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
 
       {/* Nav */}
       <nav style={{ padding: "6px 8px", flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
-        <div style={{ padding: "12px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Workspace</div>
+        <div style={{ padding: "12px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkMuted } as React.CSSProperties}>Workspace</div>
         {items.map((it) => (
           <SidebarItem
             key={it.id}
@@ -95,7 +95,7 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
         ))}
 
         {/* Scan pipeline — box-scan records entering the system: prep → ingest → review. */}
-        <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>Scan pipeline</div>
+        <div style={{ padding: "14px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkMuted } as React.CSSProperties}>Scan pipeline</div>
         <SidebarItem active={activeSection === "prep"} glyph={<PrepGlyph />} label="Prep" hint="crop · deskew" onClick={() => nav.navigate("scanPrep")} />
         <SidebarItem active={activeSection === "ingest"} glyph={<IngestGlyph />} label="Ingest" hint="box-scan" onClick={() => nav.navigate("scanPipeline")} />
         <SidebarItem active={activeSection === "facets"} glyph={<FacetsGlyph />} label="Facet review" hint="Tier 1.5 · A/B" onClick={() => nav.navigate("scanFacets")} />
@@ -104,20 +104,20 @@ function StaffSidebar({ activeSection, user }: { activeSection: string; user: st
 
         <div style={{ flex: 1 }} />
 
-        <div style={{ padding: "12px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>My queues</div>
+        <div style={{ padding: "12px 10px 6px", fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.4, textTransform: "uppercase", color: t.inkMuted } as React.CSSProperties}>My queues</div>
         <SidebarItem subtle label="Tremont · missing geo" hint="22" onClick={() => nav.navigate("photos", { savedView: "Tremont · missing geo" })} />
         <SidebarItem subtle label="Pre-1931 · no caption" hint="48" onClick={() => nav.navigate("photos", { savedView: "Pre-1931 · no caption" })} />
         <SidebarItem subtle label="Ready to publish" hint="6" onClick={() => nav.navigate("photos", { savedView: "Ready to publish" })} />
       </nav>
 
       {/* User */}
-      <div style={{ padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ padding: "12px 14px", borderTop: `1px solid ${t.borderSoft}`, display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 28, height: 28, borderRadius: "50%", background: t.tealSoft, color: t.teal, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: 12 }}>BM</div>
         <div style={{ minWidth: 0, flex: 1, lineHeight: 1.2 }}>
-          <div style={{ color: "#F6F2EB", fontSize: 12.5, fontWeight: 500 }}>{user}</div>
-          <div style={{ color: t.inkFaint, fontSize: 10.5, fontFamily: t.mono }}>librarian-editor</div>
+          <div style={{ color: t.ink, fontSize: 12.5, fontWeight: 500 }}>{user}</div>
+          <div style={{ color: t.inkMuted, fontSize: 10.5, fontFamily: t.mono }}>librarian-editor</div>
         </div>
-        <button style={{ background: "transparent", border: "none", color: t.inkFaint, cursor: "pointer", padding: 4, lineHeight: 0 }}>
+        <button style={{ background: "transparent", border: "none", color: t.inkMuted, cursor: "pointer", padding: 4, lineHeight: 0 }}>
           <svg width="14" height="14" viewBox="0 0 14 14">
             <circle cx="3" cy="7" r="1.2" fill="currentColor" />
             <circle cx="7" cy="7" r="1.2" fill="currentColor" />
@@ -144,17 +144,17 @@ function SidebarItem({ active, glyph, label, hint, badge, subtle, onClick }: {
       display: "flex", alignItems: "center", gap: 10,
       padding: subtle ? "5px 10px 5px 22px" : "7px 10px",
       borderRadius: 6,
-      background: active ? "rgba(246,242,235,0.08)" : "transparent",
-      color: active ? "#F6F2EB" : subtle ? "#C9BFA9" : "#E8DFCE",
+      background: active ? t.tealSoft : "transparent",
+      color: active ? t.teal : subtle ? t.inkMuted : t.inkSubtle,
       cursor: "pointer", position: "relative",
     }}>
       {active && <div style={{ position: "absolute", left: -8, top: 7, bottom: 7, width: 2, background: t.terracotta, borderRadius: 2 }} />}
-      {glyph && <span style={{ width: 14, height: 14, display: "inline-flex", color: active ? "#F6F2EB" : "#C9BFA9" }}>{glyph}</span>}
+      {glyph && <span style={{ width: 14, height: 14, display: "inline-flex", color: active ? t.teal : t.inkMuted }}>{glyph}</span>}
       <span style={{ flex: 1, fontSize: subtle ? 12 : 13, fontWeight: active ? 500 : 400 }}>{label}</span>
       {badge != null ? (
         <span style={{ background: t.terracotta, color: "#fff", fontFamily: t.mono, fontSize: 10, padding: "1px 6px", borderRadius: 10, lineHeight: 1.4 }}>{badge}</span>
       ) : (
-        hint && <span style={{ fontFamily: t.mono, fontSize: 10.5, color: t.inkFaint, letterSpacing: 0.2 }}>{hint}</span>
+        hint && <span style={{ fontFamily: t.mono, fontSize: 10.5, color: t.inkMuted, letterSpacing: 0.2 }}>{hint}</span>
       )}
     </div>
   );
@@ -163,15 +163,15 @@ function SidebarItem({ active, glyph, label, hint, badge, subtle, onClick }: {
 function SidebarSyncCard() {
   const t = STAFF_TOKENS;
   return (
-    <div style={{ background: "rgba(246,242,235,0.06)", border: "1px solid rgba(246,242,235,0.10)", borderRadius: 8, padding: "10px 12px" }}>
+    <div style={{ background: t.bgPanel, border: `1px solid ${t.borderSoft}`, borderRadius: 8, padding: "10px 12px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.2, textTransform: "uppercase", color: t.inkFaint } as React.CSSProperties}>ContentDM sync</span>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.sage, boxShadow: `0 0 0 3px ${t.sage}22` }} />
+        <span style={{ fontFamily: t.mono, fontSize: 9.5, letterSpacing: 1.2, textTransform: "uppercase", color: t.inkMuted } as React.CSSProperties}>ContentDM sync</span>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.sageBase, boxShadow: `0 0 0 3px ${t.sageBase}22` }} />
       </div>
-      <div style={{ color: "#F6F2EB", fontSize: 12.5, lineHeight: 1.4 }}>
+      <div style={{ color: t.ink, fontSize: 12.5, lineHeight: 1.4 }}>
         <span style={{ fontWeight: 600 }}>3 records</span> changed upstream
       </div>
-      <div style={{ color: t.inkFaint, fontSize: 11, marginTop: 2, fontFamily: t.mono }}>last pull · 04:12 today</div>
+      <div style={{ color: t.inkMuted, fontSize: 11, marginTop: 2, fontFamily: t.mono }}>last pull · 04:12 today</div>
     </div>
   );
 }
@@ -192,11 +192,11 @@ function StaffTopBar({ title, meta }: { title: string; meta?: string }) {
         <span style={{ fontFamily: t.mono, fontSize: 10.5, color: t.inkFaint }}>⌘ K</span>
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: t.mono, fontSize: 10.5, color: t.inkMuted, letterSpacing: 0.3 }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.sage }} />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.sageBase }} />
         <span>All changes saved · 14:08</span>
       </div>
-      <button onClick={() => nav.toast("Stub — new record creation flow not built", "info")} style={{ height: 34, padding: "0 14px", background: t.ink, color: "#F6F2EB", border: "none", borderRadius: 6, fontSize: 12.5, fontWeight: 500, cursor: "pointer", fontFamily: t.sans, display: "flex", alignItems: "center", gap: 6 }}>
-        <svg width="11" height="11" viewBox="0 0 11 11"><path d="M5.5 1v9M1 5.5h9" stroke="#F6F2EB" strokeWidth="1.5" strokeLinecap="round" /></svg>
+      <button onClick={() => nav.toast("Stub — new record creation flow not built", "info")} style={{ height: 34, padding: "0 14px", background: t.ink, color: t.onFill, border: "none", borderRadius: 6, fontSize: 12.5, fontWeight: 500, cursor: "pointer", fontFamily: t.sans, display: "flex", alignItems: "center", gap: 6 }}>
+        <svg width="11" height="11" viewBox="0 0 11 11"><path d="M5.5 1v9M1 5.5h9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
         New
       </button>
     </div>

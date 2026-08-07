@@ -98,11 +98,15 @@ export const photoEnrichment = pgTable("photo_enrichment", {
   publicStatus: text("public_status").default("draft"),
   featuredWeight: integer("featured_weight"),
   themes: text("themes").array(),
-  // Then-and-now
+  // Then-and-now. The librarian frames the modern viewpoint by hand in Street View and pastes
+  // the "Share → Embed a map" URL; lib/rephoto.ts unpacks its camera geometry into the columns
+  // below, so the framing lives here as numbers we own rather than sealed in a Google string.
   rephotoEligible: boolean("rephoto_eligible"),
-  rephotoBearing: numeric("rephoto_bearing"),
-  rephotoModernLat: numeric("rephoto_modern_lat"),
-  rephotoModernLng: numeric("rephoto_modern_lng"),
+  rephotoEmbedUrl: text("rephoto_embed_url"), // exactly what staff pasted — the source of truth
+  rephotoBearing: numeric("rephoto_bearing"), // heading, degrees clockwise from north
+  rephotoPitch: numeric("rephoto_pitch"), // degrees; negative looks down
+  rephotoModernLat: numeric("rephoto_modern_lat"), // where the modern camera stands…
+  rephotoModernLng: numeric("rephoto_modern_lng"), // …NOT the subject (that's lat/lng above)
   rephotoNotes: text("rephoto_notes"),
   // Quality
   captionQuality: text("caption_quality"),

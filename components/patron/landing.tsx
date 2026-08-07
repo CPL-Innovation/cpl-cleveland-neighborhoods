@@ -464,9 +464,22 @@ function DensityLegend() {
       position: "absolute", bottom: 28, left: 360, zIndex: 4, padding: "10px 14px",
       background: "rgba(255,255,255,0.86)", border: "1px solid #D6CDBD", borderRadius: 10,
       fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 11, color: "#6B6359",
+      // The legend sits at a fixed left offset, so each item added pushes its right edge toward
+      // the viewport. Wrap instead of clipping — the count chip made it 4 items wide.
       display: "flex", alignItems: "center", gap: 10, letterSpacing: 0.4, textTransform: "uppercase",
-    }}>
-      <span>1 dot = 1 photo</span>
+      flexWrap: "wrap", maxWidth: "calc(100vw - 380px)", rowGap: 6,
+    } as React.CSSProperties}>
+      {/* A dot is a *place*, not a photograph — corners photographed more than once carry a
+          count (lib/patron-places.ts). Saying "1 dot = 1 photo" here would be a plain lie. */}
+      <span>1 dot = 1 corner</span>
+      <span style={{ color: "#D6CDBD" }}>·</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{
+          minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "#A8362B",
+          color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", display: "inline-block",
+        }}>3</span>
+        photos here
+      </span>
       <span style={{ color: "#D6CDBD" }}>·</span>
       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#C8983A", display: "inline-block" }} />

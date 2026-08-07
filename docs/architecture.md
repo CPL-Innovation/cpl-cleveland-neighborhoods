@@ -55,6 +55,35 @@
 | Derived image hosting | Pluggable (`lib/storage.ts`): local disk `public/derivatives/` in dev · Supabase Storage when deployed | The store writes the JPEG **once**; `scan_review.jpeg_path`/`jpeg_url` is what the UI `<img>` loads (relative `/derivatives/<chc>.jpg` locally, public URL on Supabase). |
 | Harvested ContentDM data | Static JSON (`public/data/tier3-all/records.json`) | Read-only; not in the DB for this slice. |
 
+## Design system (an external dependency now)
+
+The staff UI's look is **not defined in this repo**. Two packages own it, both authored in the
+Dateline monorepo and consumed here. They are checked out at **`../cpl-design-system/packages/*`**
+— a git worktree pinned to the `design-system/cpl-tokens-and-ui` branch, so the design system has
+a stable directory that doesn't move when Dateline's own feature branches switch underneath it:
+
+| Package | What CN takes from it | Seam |
+|---|---|---|
+| `@cpl/tokens` | Every color, type, space, radius and shadow value. `STAFF_TOKENS` (`lib/tokens.ts`) is a *definition over* the package's static `tokens` export — same 22-odd keys out, package values in. **No color literals remain in that file.** | `lib/tokens.ts` — the one file to edit for a re-skin; never the ~900 `t.*` call sites |
+| `@cpl/ui` | `HonestyBadge` — the "machine-extracted · curator-reviewable" provenance contract. Replaced CN's bespoke `VLM read` / `VLM` / `AI` / `edited` / `VLM: <value>` markers. | imported directly at call sites (`components/scan/review.tsx`, `components/scan/facet-review.tsx`, `components/staff/ui.tsx`) |
+
+Three consequences worth knowing:
+
+- **Bridged by `npm link`, not the registry.** Neither package is in `package.json`, so any
+  `npm install` breaks both links, and linking one **prunes the other**. Always re-link as a
+  pair: `npm link @cpl/tokens @cpl/ui`. (See CLAUDE.md § Gotchas.)
+- **Values are static, not live.** CN reads the resolved-hex `tokens` export and loads no
+  stylesheet. Runtime theme switching would be a migration to `cssVar`/`cssVarName`, not a
+  config flip.
+- **Status colors come in three forms** — base (dot/fill) · soft (chip background) · ink
+  (anything with text). CN's bare `sage`/`ochre`/`draft` keys are the **inks**, because a
+  filled control's label is what has to stay legible; `*Base` exists only for bare dots and
+  decorative rules. Getting this backwards reintroduces AA failures on labeled controls.
+
+Not everything in CN is a provenance marker: `ConfidenceBadge` and `↑ in production` keep their
+own (non-info) colors deliberately — confidence and publication state are different claims from
+provenance, and flattening them into the honesty palette would erase that distinction.
+
 ## Surfaces (staff app)
 
 The staff app is one client SPA (`components/staff/app.tsx`, mounted at `app/staff/page.tsx`).

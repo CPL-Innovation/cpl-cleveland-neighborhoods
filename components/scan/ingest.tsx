@@ -160,7 +160,7 @@ export function ScanInbox({
         {/* Progress bar */}
         {progress && (
           <div style={{ height: 3, background: t.borderSoft }}>
-            <div style={{ width: `${pct}%`, height: "100%", background: running ? t.teal : t.sage, transition: "width 200ms ease-out" }} />
+            <div style={{ width: `${pct}%`, height: "100%", background: running ? t.teal : t.sageBase, transition: "width 200ms ease-out" }} />
           </div>
         )}
 

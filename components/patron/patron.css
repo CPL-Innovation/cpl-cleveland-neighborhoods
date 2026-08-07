@@ -38,6 +38,7 @@
   border: none !important;
 }
 .cm-dot {
+  --cm-tone: #a8362b;
   width: 22px;
   height: 22px;
   display: grid;
@@ -48,9 +49,11 @@
   will-change: transform;
 }
 .cm-dot--featured {
+  --cm-tone: #c8983a;
   color: #c8983a;
 }
 .cm-dot--dim {
+  --cm-tone: #a39684;
   color: #a39684;
   opacity: 0.5;
   pointer-events: none;
@@ -218,4 +221,34 @@
     transform: scale(1.4);
     opacity: 0;
   }
+}
+
+/* ── Stacked dots: one corner, photographed more than once ──
+   The count is of photographs currently inside the time slider's range; the dot dims only
+   when the whole corner falls outside it. Sits on the ring's upper-right so it never covers
+   the core, which is what carries the featured/selected colour. */
+.cm-dot-count {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: var(--cm-tone);
+  color: #fff;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  line-height: 14px;
+  text-align: center;
+  font-weight: 500;
+  box-shadow: 0 0 0 1.5px #f6f2eb;
+  pointer-events: none;
+}
+.cm-dot--stacked .cm-dot-ring {
+  opacity: 0.9;
+}
+.cm-dot--dim .cm-dot-count {
+  display: none;
 }

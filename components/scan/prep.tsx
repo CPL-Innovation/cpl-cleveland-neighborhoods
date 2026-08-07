@@ -221,12 +221,13 @@ function Tile({ r, ver, running, onOpen, t }: { r: RawEntry; ver: number; runnin
   const flagged = r.status === "flagged";
   const approved = r.status === "approved";
   const bust = (s: string | null) => (s ? `${s}?v=${ver}` : null);
-  const accent = flagged ? t.ochre : approved ? t.sage : t.border;
+  // A rule + glow, no text on them — the base fills, not the inks.
+  const accent = flagged ? t.ochreBase : approved ? t.sageBase : t.border;
   return (
     <div onClick={onOpen} style={{
-      background: t.bgPanel, border: `1px solid ${flagged ? t.ochre + "88" : t.border}`,
+      background: t.bgPanel, border: `1px solid ${flagged ? t.ochreBase + "88" : t.border}`,
       borderLeft: `3px solid ${accent}`, borderRadius: 8, overflow: "hidden", cursor: "pointer",
-      boxShadow: flagged ? `0 0 0 3px ${t.ochre}1A` : "none",
+      boxShadow: flagged ? `0 0 0 3px ${t.ochreBase}1A` : "none",
       opacity: running ? 0.6 : 1, transition: "opacity 150ms",
     }}>
       {/* raw ▸ crop */}

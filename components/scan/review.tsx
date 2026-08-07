@@ -8,6 +8,7 @@ import React from "react";
 // Spec: scan-pipeline-ux.md §"Surface B" and §"Verdict & edit behavior".
 
 import { STAFF_TOKENS } from "@/lib/tokens";
+import { HonestyBadge } from "@cpl/ui";
 import type { StaffTokens } from "@/lib/tokens";
 import { useNav } from "@/components/staff/nav";
 import { scanApi } from "@/lib/scan-api";
@@ -212,19 +213,19 @@ function ZoomImage({ cur }: { cur: ScanRecord }) {
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 12, minHeight: 0, overflow: "hidden" } as React.CSSProperties}>
       <div
         onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
-        style={{ flex: 1, minHeight: 0, background: "#1A1814", borderRadius: 8, position: "relative", overflow: "hidden", cursor: view.scale > 1 ? "grab" : "default" } as React.CSSProperties}
+        style={{ flex: 1, minHeight: 0, background: t.bgInk, borderRadius: 8, position: "relative", overflow: "hidden", cursor: view.scale > 1 ? "grab" : "default" } as React.CSSProperties}
       >
         <img src={src} alt={cur.chc_id} draggable={false} style={{
           position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
           transform: `translate(${view.x}%, ${view.y}%) scale(${view.scale})`, transition: drag.current ? "none" : "transform 120ms ease-out",
         } as React.CSSProperties} />
         {/* zoom toolbox */}
-        <div style={{ position: "absolute", bottom: 14, left: 14, display: "flex", gap: 6, background: "rgba(26,24,20,0.72)", backdropFilter: "blur(4px)", borderRadius: 6, padding: "5px 8px" } as React.CSSProperties}>
+        <div style={{ position: "absolute", bottom: 14, left: 14, display: "flex", gap: 6, background: t.bgInk + "B8", backdropFilter: "blur(4px)", borderRadius: 6, padding: "5px 8px" } as React.CSSProperties}>
           <ZoomBtn label="Address ↙" onClick={() => zoomCorner(0.16, 0.9)} />
           <ZoomBtn label="Year ↘" onClick={() => zoomCorner(0.86, 0.9)} />
           <ZoomBtn label="Fit" onClick={reset} />
         </div>
-        <div style={{ position: "absolute", top: 14, right: 14, background: "rgba(26,24,20,0.6)", color: "rgba(255,255,255,0.85)", fontFamily: t.mono, fontSize: 10.5, padding: "4px 8px", borderRadius: 4 } as React.CSSProperties}>
+        <div style={{ position: "absolute", top: 14, right: 14, background: t.bgInk + "99", color: t.onFill + "D9", fontFamily: t.mono, fontSize: 10.5, padding: "4px 8px", borderRadius: 4 } as React.CSSProperties}>
           {Math.round(view.scale * 100)}% · scroll to zoom, drag to pan
         </div>
       </div>
@@ -238,7 +239,7 @@ function ZoomImage({ cur }: { cur: ScanRecord }) {
 }
 function ZoomBtn({ label, onClick }: { label: string; onClick: () => void }) {
   const t = STAFF_TOKENS;
-  return <button onClick={onClick} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.85)", fontFamily: t.mono, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>{label}</button>;
+  return <button onClick={onClick} style={{ background: "transparent", border: "none", color: t.onFill + "D9", fontFamily: t.mono, fontSize: 11, cursor: "pointer", padding: "2px 4px" }}>{label}</button>;
 }
 
 // ── Right: handwriting verdict (address / year) ──────────────
@@ -280,7 +281,12 @@ function HandwritingVerdict({
     <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: `1px solid ${t.borderSoft}` }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: t.ink }}>{label}</span>
-        <span style={{ fontFamily: t.mono, fontSize: 9.5, color: t.teal, background: t.tealSoft, padding: "1px 5px", borderRadius: 3, letterSpacing: 0.4, textTransform: "uppercase" } as React.CSSProperties}>VLM read</span>
+        <HonestyBadge
+          provenance={{ method: "vlm" }}
+          review={verdict ? "reviewed" : "unreviewed"}
+          edited={verdict === "edited"}
+          original={vlmValue}
+        />
         <span style={{ fontSize: 11, color: t.inkFaint }}>{hint}</span>
       </div>
 
@@ -338,7 +344,12 @@ function DescriptionVerdict({
     <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: `1px solid ${t.borderSoft}` }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 12.5, fontWeight: 600, color: t.ink }}>Visual description</span>
-        <span style={{ fontFamily: t.mono, fontSize: 9.5, color: t.teal, background: t.tealSoft, padding: "1px 5px", borderRadius: 3, letterSpacing: 0.4, textTransform: "uppercase" } as React.CSSProperties}>VLM</span>
+        <HonestyBadge
+          provenance={{ method: "vlm" }}
+          review={verdict ? "reviewed" : "unreviewed"}
+          edited={verdict === "edited"}
+          original={vlmValue}
+        />
       </div>
 
       {editing ? (
@@ -389,7 +400,7 @@ function VerdictBtn({ active, color, onClick, children, title }: { active: boole
   return (
     <button onClick={onClick} title={title} style={{
       padding: "6px 12px", fontSize: 12.5, fontFamily: "inherit", cursor: "pointer",
-      background: active ? color : "#fff", color: active ? "#fff" : t.ink,
+      background: active ? color : t.bgPanel, color: active ? t.onFill : t.ink,
       border: `1px solid ${active ? color : t.border}`, borderRadius: 5, fontWeight: active ? 500 : 400,
     }}>{children}</button>
   );

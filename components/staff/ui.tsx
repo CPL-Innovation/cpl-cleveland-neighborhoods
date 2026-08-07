@@ -4,6 +4,7 @@
 // so call sites pass STAFF_TOKENS unchanged.
 import React from "react";
 import { STAFF_TOKENS, type StaffTokens } from "@/lib/tokens";
+import { HonestyBadge } from "@cpl/ui";
 
 export function pillBtn(t: StaffTokens, primary?: boolean): React.CSSProperties {
   return {
@@ -113,7 +114,7 @@ export function Field({ label, provenance, dirty, ai, children }: {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 12, fontWeight: 500, color: t.ink }}>{label}</span>
-          {dirty && <span style={{ width: 5, height: 5, borderRadius: "50%", background: t.draft }} title="unsaved changes" />}
+          {dirty && <span style={{ width: 5, height: 5, borderRadius: "50%", background: t.draftBase }} title="unsaved changes" />}
           {ai && (
             <span style={{
               fontFamily: t.mono, fontSize: 9, letterSpacing: 0.6,
@@ -162,11 +163,8 @@ export function ChipInput({ chips, placeholder, suggested }: { chips: string[]; 
       </div>
       {suggested && (
         <div style={{ fontSize: 11, color: t.teal, marginTop: 5, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
-          <span style={{
-            fontFamily: t.mono, fontSize: 9, letterSpacing: 0.5,
-            textTransform: "uppercase", background: t.tealSoft,
-            padding: "1px 5px", borderRadius: 3,
-          }}>AI</span>
+          {/* A suggestion nobody has accepted yet — `unreviewed` is the honest state. */}
+          <HonestyBadge provenance={{ method: "ai" }} review="unreviewed" />
           {suggested}
         </div>
       )}

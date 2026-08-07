@@ -136,6 +136,9 @@ export interface FacetPhoto {
   lat: number | null; // normalized (Finalize stage) — null until geocoded/pinned
   lng: number | null;
   facets: Run2Facets;
+  /** Staff-framed Street View embed for the then-and-now. Null = no modern viewpoint recorded. */
+  rephoto_embed_url: string | null;
+  rephoto_bearing: number | null;
 }
 
 export interface Run2Facets {

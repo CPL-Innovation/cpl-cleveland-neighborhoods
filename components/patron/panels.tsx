@@ -4,6 +4,7 @@
 // window.ALL_PHOTOS); the story trail reads MILLIONAIRES_ROW directly.
 import React from "react";
 import { MILLIONAIRES_ROW, type Photo } from "./data";
+import { siblingsOf, yearSpan } from "@/lib/patron-places";
 
 export function SearchIcon({ size = 14, color = "#3D3833" }: { size?: number; color?: string }) {
   return (
@@ -146,13 +147,32 @@ export function PhotoDetailPanel({
 }) {
   // Neighbors-in-time: within ~80 viewBox units AND ±8 years. Skipped for the faceted 99
   // (they aren't map-placed — the convergence slice opens them from the browse grid).
-  const neighbors = photo.facets ? [] : photos.filter((p) =>
+  // Repeat visits to this exact corner. Grouping is by coordinate rather than by proximity —
+  // these are the *same address* photographed again, which is a stronger claim than "nearby",
+  // and it's what the map now puts behind a single dot (lib/patron-places.ts).
+  const corner = siblingsOf(photo, photos);
+  const hasSequence = corner.length > 1;
+
+  // Proximity neighbours are a weaker relation than the corner sequence above — suppress them
+  // when this photo already has one, so the panel doesn't show two overlapping "related" lists.
+  const neighbors = (photo.facets || hasSequence) ? [] : photos.filter((p) =>
     p.id !== photo.id &&
     Math.hypot(p.x - photo.x, p.y - photo.y) < 80 &&
     Math.abs(p.year - photo.year) <= 8
   ).slice(0, 5);
 
+  // Then-and-now. The "now" is a Street View viewpoint a librarian framed by hand to match the
+  // photographer's position — so it only exists where someone has done that work. No recorded
+  // viewpoint means no toggle: offering "Now" and showing a placeholder would be a promise the
+  // panel can't keep.
+  const rephotoUrl = photo.rephotoEmbedUrl || null;
+  // `year` is 0 for an undated box-scan (the adapters' sentinel — Photo.year is a number the
+  // map filters on, so it can't be null). Never print the sentinel: an undated print must read
+  // as undated, not as the year zero.
+  const dated = Number.isFinite(photo.year) && photo.year > 0;
+
   const [view, setView] = React.useState<"then" | "now">("then");
+  React.useEffect(() => { if (!rephotoUrl) setView("then"); }, [rephotoUrl, photo.id]);
 
   return (
     <>
@@ -173,7 +193,7 @@ export function PhotoDetailPanel({
           <div style={{
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#6B6359",
-          }}>Photo · {photo.year}</div>
+          }}>{dated ? `Photo · ${photo.year}` : "Photo · date unknown"}</div>
           <button onClick={onClose} style={{
             background: "none", border: "none", cursor: "pointer",
             fontSize: 20, lineHeight: 1, color: "#6B6359",
@@ -194,24 +214,37 @@ export function PhotoDetailPanel({
                 objectFit: "contain", display: "block",
               }} />
             )}
-            <div style={{
+            {view === "now" && rephotoUrl && (
+              <iframe
+                key={photo.id}
+                src={rephotoUrl}
+                title={`Street View looking at ${photo.address || photo.title} today`}
+                loading="lazy"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+              />
+            )}
+            {view === "then" && <div style={{
               position: "absolute", inset: 0,
               background: "linear-gradient(180deg, rgba(26,24,20,0) 50%, rgba(26,24,20,0.45) 100%)",
               pointerEvents: "none",
-            }} />
-            <div style={{
+            }} />}
+            {/* Only over the archival image: Google's embed puts its own address card top-left,
+                and the Then/Now toggle plus the attribution line below already say which is which. */}
+            {view === "then" && <div style={{
               position: "absolute", top: 10, left: 12,
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 10, color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
               padding: "4px 8px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase",
-            }}>{view === "then" ? `Then · ${photo.year}` : "Now · 2026"}</div>
+            }}>{dated ? `Then · ${photo.year}` : "Then"}</div>}
 
             <div style={{
               position: "absolute", bottom: 12, left: 12, display: "flex",
               background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 999,
               overflow: "hidden", boxShadow: "0 2px 8px rgba(26,24,20,0.15)",
             }}>
-              {(["then", "now"] as const).map((m) => (
+              {(rephotoUrl ? (["then", "now"] as const) : (["then"] as const)).map((m) => (
                 <button key={m} onClick={() => setView(m)} style={{
                   padding: "6px 14px",
                   background: view === m ? "#1A1814" : "transparent",
@@ -227,8 +260,74 @@ export function PhotoDetailPanel({
               position: "absolute", bottom: 12, right: 12,
               fontFamily: '"JetBrains Mono", ui-monospace, monospace',
               fontSize: 10, color: "#fff", opacity: 0.85,
-            }}>scroll to zoom</div>
+            }}>{view === "then" ? "scroll to zoom" : ""}</div>
           </div>
+
+          {/* Whose image is this? The archival print is CPL's; the "now" is Google's, and the
+              viewpoint is a librarian's judgement about where the photographer stood. Say so —
+              the same contract the AI-extracted label keeps elsewhere in this panel. */}
+          {view === "now" && rephotoUrl && (
+            <div style={{
+              margin: "-6px 18px 0", fontSize: 11, lineHeight: 1.5, color: "#6B6359",
+              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            }}>
+              Imagery &copy; Google Street View · viewpoint matched to the photograph by CPL staff
+              {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}\u00B0` : ""}
+              <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 3 }}>
+                Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
+              </div>
+            </div>
+          )}
+
+          {hasSequence && (
+            <div style={{ margin: "14px 18px 0" }}>
+              <div style={{
+                fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10,
+                letterSpacing: 1, textTransform: "uppercase", color: "#6B6359", marginBottom: 8,
+              }}>
+                This corner · {corner.length} photographs{yearSpan(corner) ? ` · ${yearSpan(corner)}` : ""}
+              </div>
+              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+                {corner.map((c) => {
+                  const isCurrent = c.id === photo.id;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => !isCurrent && onOpenPhoto(c)}
+                      title={c.year > 0 ? String(c.year) : "date unknown"}
+                      style={{
+                        flex: "0 0 auto", width: 78, padding: 0, cursor: isCurrent ? "default" : "pointer",
+                        background: "transparent", textAlign: "left",
+                        border: isCurrent ? "2px solid #1A1814" : "1px solid #D6CDBD",
+                        borderRadius: 5, overflow: "hidden", opacity: isCurrent ? 1 : 0.82,
+                      }}
+                    >
+                      <div style={{ position: "relative", height: 52, background: "#1A1814" }}>
+                        {c.thumb && (
+                          <img src={c.thumb} alt="" style={{
+                            position: "absolute", inset: 0, width: "100%", height: "100%",
+                            objectFit: "cover", display: "block",
+                          }} />
+                        )}
+                        {/* a sibling that already has a modern viewpoint framed */}
+                        {c.rephotoEmbedUrl && (
+                          <span title="then & now available" style={{
+                            position: "absolute", top: 3, right: 3, width: 6, height: 6,
+                            borderRadius: "50%", background: "#E9E186", boxShadow: "0 0 0 1.5px rgba(26,24,20,0.5)",
+                          }} />
+                        )}
+                      </div>
+                      <div style={{
+                        fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 9.5,
+                        padding: "3px 5px", color: isCurrent ? "#1A1814" : "#6B6359",
+                        background: isCurrent ? "#F1ECE2" : "#fff",
+                      }}>{c.year > 0 ? c.year : "—"}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ padding: "0 18px 0" }}>
             <div style={{
@@ -246,7 +345,7 @@ export function PhotoDetailPanel({
             padding: "0 18px", display: "grid", gridTemplateColumns: "110px 1fr",
             rowGap: 8, columnGap: 12, fontSize: 13, color: "#3D3833",
           }}>
-            <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || `c. ${photo.year}`}</MetaValue>
+            <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || (dated ? `c. ${photo.year}` : "no legible date stamp")}</MetaValue>
             <MetaLabel>Photographer</MetaLabel><MetaValue>{photo.photographer}</MetaValue>
             <MetaLabel>Address</MetaLabel><MetaValue>{photo.address}</MetaValue>
             <MetaLabel>Neighborhood</MetaLabel><MetaValue>{photo.neighborhood}</MetaValue>

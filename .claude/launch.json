@@ -4,8 +4,37 @@
     {
       "name": "next-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "tokens-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4321",
+        "--directory",
+        "/Users/junguguo/Documents/Vibe Code/cpl-design-system/packages/tokens"
+      ],
+      "port": 4321,
+      "url": "http://localhost:4321"
+    },
+    {
+      "name": "ui-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4322",
+        "--directory",
+        "/Users/junguguo/Documents/Vibe Code/cpl-design-system/packages"
+      ],
+      "port": 4322,
+      "url": "http://localhost:4322"
     }
   ]
 }

@@ -63,6 +63,8 @@ export function parseStampDate(yearRaw: string): { dateStart: string; precision:
 
 // ── List shape for the Finalize surface ──
 export type FinalizeState = "pending" | "finalized" | "needs_pin";
+/** `viewpoints` = how many have a then-and-now recorded — the curation progress signal. */
+export type FinalizeCounts = Record<FinalizeState | "reviewed" | "total" | "viewpoints", number>;
 export interface FinalizeRow {
   chc_id: string;
   jpeg_url: string;
@@ -76,6 +78,8 @@ export interface FinalizeRow {
   date_start: string | null;
   geo_source: string | null;
   miss_reason: string | null; // why it needs a pin (when state = needs_pin)
+  rephoto_embed_url: string | null; // the staff-framed then-and-now viewpoint, if recorded
+  rephoto_bearing: number | null; // unpacked from that URL — a compass check on the framing
 }
 
 interface UnifiedRow {
@@ -86,6 +90,8 @@ interface UnifiedRow {
   dateStart: string | null;
   geoSource: string | null;
   addressRaw: string | null;
+  rephotoEmbedUrl: string | null;
+  rephotoBearing: string | null;
 }
 
 async function unifiedBoxScans(): Promise<Map<string, UnifiedRow>> {
@@ -101,6 +107,8 @@ async function unifiedBoxScans(): Promise<Map<string, UnifiedRow>> {
       dateStart: photoEnrichment.dateStart,
       geoSource: photoEnrichment.geoSource,
       addressRaw: photoEnrichment.addressRaw,
+      rephotoEmbedUrl: photoEnrichment.rephotoEmbedUrl,
+      rephotoBearing: photoEnrichment.rephotoBearing,
     })
     .from(photoEnrichment)
     .where(eq(photoEnrichment.source, "box_scan"));
@@ -114,7 +122,7 @@ function deriveState(u: UnifiedRow | undefined): FinalizeState {
 }
 
 /** The Finalize worklist: every reviewed box-scan, with its normalize/pin state. */
-export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Record<FinalizeState | "reviewed" | "total", number> }> {
+export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: FinalizeCounts }> {
   const { listRecords } = await import("@/lib/scan-store");
   const [records, unified] = await Promise.all([listRecords(), unifiedBoxScans()]);
   const reviewed = records.filter((r) => r.review?.status === "reviewed");
@@ -138,6 +146,8 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Rec
       date_start: u?.dateStart ?? null,
       geo_source: u?.geoSource ?? null,
       miss_reason: state === "needs_pin" ? (ambiguityReason(address) ?? "geocoder couldn't resolve") : null,
+      rephoto_embed_url: u?.rephotoEmbedUrl ?? null,
+      rephoto_bearing: u?.rephotoBearing != null ? Number(u.rephotoBearing) : null,
     };
   });
 
@@ -147,7 +157,8 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Rec
     pending: rows.filter((r) => r.state === "pending").length,
     finalized: rows.filter((r) => r.state === "finalized").length,
     needs_pin: rows.filter((r) => r.state === "needs_pin").length,
-  } as Record<FinalizeState | "reviewed" | "total", number>;
+    viewpoints: rows.filter((r) => r.rephoto_embed_url).length,
+  } as FinalizeCounts;
 
   return { rows, counts };
 }
@@ -224,6 +235,42 @@ export async function finalizeAll(): Promise<FinalizeRunResult> {
 }
 
 // ── The pin tray: staff drops a coordinate on a geocode miss (geo_source = staff_lookup) ──
+/**
+ * Record the modern viewpoint for a then-and-now.
+ *
+ * Staff paste the Street View embed URL they framed by hand; we keep it verbatim AND unpack
+ * its camera geometry into the `rephoto_*` columns, so the framing outlives the provider.
+ * Passing an empty string clears the viewpoint.
+ */
+export async function setRephoto(chcId: string, embedUrl: string): Promise<{ cleared: boolean; bearing: number | null }> {
+  const { getDb } = await import("@/lib/db");
+  const { photoEnrichment } = await import("@/drizzle/schema");
+  const { and, eq } = await import("drizzle-orm");
+  const db = getDb();
+
+  const clearing = !embedUrl.trim();
+  const framing = clearing ? null : (await import("@/lib/rephoto")).parseRephotoEmbed(embedUrl);
+
+  const res = await db
+    .update(photoEnrichment)
+    .set({
+      rephotoEmbedUrl: framing?.embedUrl ?? null,
+      rephotoModernLat: framing?.lat != null ? String(framing.lat) : null,
+      rephotoModernLng: framing?.lng != null ? String(framing.lng) : null,
+      rephotoBearing: framing?.bearing != null ? String(framing.bearing) : null,
+      rephotoPitch: framing?.pitch != null ? String(framing.pitch) : null,
+      // Eligibility is a *claim about the photo* (can this corner be re-shot?), so a cleared
+      // viewpoint leaves it alone rather than retracting the judgement.
+      ...(clearing ? {} : { rephotoEligible: true }),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(photoEnrichment.id, chcId), eq(photoEnrichment.source, "box_scan")))
+    .returning({ id: photoEnrichment.id });
+
+  if (!res.length) throw new Error(`${chcId} is not a normalized box-scan — run Finalize first`);
+  return { cleared: clearing, bearing: framing?.bearing ?? null };
+}
+
 export async function setPin(chcId: string, lat: number, lng: number): Promise<void> {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("lat/lng must be finite numbers");
   const { getDb } = await import("@/lib/db");

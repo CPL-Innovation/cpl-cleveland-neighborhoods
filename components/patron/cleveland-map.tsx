@@ -8,6 +8,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./patron.css";
 import { MILLIONAIRES_ROW, unprojectXY, type Photo } from "./data";
+import { groupIntoPlaces, yearSpan } from "@/lib/patron-places";
 
 interface ClevelandMapProps {
   width?: number;
@@ -41,7 +42,10 @@ export default function ClevelandMap({
 }: ClevelandMapProps) {
   const containerRef = React.useRef<HTMLDivElement | null>(null);
   const mapRef = React.useRef<L.Map | null>(null);
+  // Keyed by PLACE, not photo: repeat visits to one corner share a coordinate, so one marker
+  // stands for all of them (lib/patron-places.ts). placeOfPhoto maps back for selection.
   const markersRef = React.useRef<Map<string, L.Marker>>(new Map());
+  const placeOfPhotoRef = React.useRef<Map<string, string>>(new Map());
   const corridorRef = React.useRef<L.LayerGroup | null>(null);
   const nearYouRef = React.useRef<L.Marker | null>(null);
 
@@ -118,28 +122,37 @@ export default function ClevelandMap({
 
     markersRef.current.forEach((m) => m.remove());
     markersRef.current.clear();
+    placeOfPhotoRef.current.clear();
 
-    photos.forEach((p) => {
-      const isIn = p.year >= lo && p.year <= hi;
-      const isFeatured = !!p.featured;
-      const ll = (p.lat != null && p.lng != null)
-        ? { lat: p.lat, lng: p.lng }
-        : unprojectXY(p.x, p.y);
+    groupIntoPlaces(photos).forEach((place) => {
+      // The slider filters *within* a place: the count reflects what's in range, and the dot
+      // only dims when the whole corner falls outside it. A corner never vanishes because one
+      // of its visits is out of range.
+      const inRange = place.photos.filter((p) => p.year >= lo && p.year <= hi);
+      const isIn = inRange.length > 0;
+      const shown = isIn ? inRange : place.photos;
+      const lead = shown[0];
+      const isFeatured = shown.some((p) => p.featured);
+      const stacked = inRange.length > 1;
+
+      for (const p of place.photos) placeOfPhotoRef.current.set(p.id, place.key);
 
       const classes = [
         "cm-dot",
         isFeatured ? "cm-dot--featured" : "",
         !isIn ? "cm-dot--dim" : "",
+        stacked ? "cm-dot--stacked" : "",
       ].filter(Boolean).join(" ");
 
+      const badge = stacked ? `<span class="cm-dot-count">${inRange.length}</span>` : "";
       const icon = L.divIcon({
         className: "cm-dot-wrap",
-        html: `<div class="${classes}" data-photo-id="${esc(p.id)}"><span class="cm-dot-ring"></span><span class="cm-dot-core"></span></div>`,
+        html: `<div class="${classes}" data-place-key="${esc(place.key)}"><span class="cm-dot-ring"></span><span class="cm-dot-core"></span>${badge}</div>`,
         iconSize: [22, 22],
         iconAnchor: [11, 11],
       });
 
-      const marker = L.marker([ll.lat, ll.lng], {
+      const marker = L.marker([place.lat, place.lng], {
         icon,
         interactive: isIn,
         keyboard: false,
@@ -149,36 +162,39 @@ export default function ClevelandMap({
 
       if (isIn) {
         const yearClass = isFeatured ? "cm-year cm-year--featured" : "cm-year";
+        const span = yearSpan(shown);
         const metaParts: string[] = [];
-        if (p.neighborhood) metaParts.push(p.neighborhood);
-        if (p.story) metaParts.push(p.story);
+        if (lead.neighborhood) metaParts.push(lead.neighborhood);
+        if (lead.story) metaParts.push(lead.story);
+        if (stacked) metaParts.unshift(`${inRange.length} photographs`);
         const metaHtml = metaParts.length
           ? `<span class="cm-meta">${esc(metaParts.join(" · "))}</span>`
           : "";
         marker.bindTooltip(
-          `<span class="${yearClass}">${p.year}</span>` +
-            `<span class="cm-title">${esc(p.title)}</span>` +
+          `<span class="${yearClass}">${span ?? "date unknown"}</span>` +
+            `<span class="cm-title">${esc(lead.title)}</span>` +
             metaHtml,
           { direction: "top", offset: [0, -8], className: "cm-tooltip", opacity: 1, sticky: false },
         );
-        marker.on("click", () => cbRef.current.onDotClick && cbRef.current.onDotClick(p));
-        marker.on("mouseover", () => cbRef.current.onDotHover && cbRef.current.onDotHover(p.id));
+        marker.on("click", () => cbRef.current.onDotClick && cbRef.current.onDotClick(lead));
+        marker.on("mouseover", () => cbRef.current.onDotHover && cbRef.current.onDotHover(lead.id));
         marker.on("mouseout", () => cbRef.current.onDotHover && cbRef.current.onDotHover(null));
       }
 
       marker.addTo(map);
-      markersRef.current.set(p.id, marker);
+      markersRef.current.set(place.key, marker);
     });
   }, [lo, hi, photos]);
 
   // ── Highlight selected (CSS class on the div-icon) ──
   React.useEffect(() => {
-    markersRef.current.forEach((m, id) => {
+    const selectedPlace = selectedId ? placeOfPhotoRef.current.get(selectedId) : null;
+    markersRef.current.forEach((m, key) => {
       const el = m.getElement();
       if (!el) return;
       const dot = el.querySelector(".cm-dot");
       if (!dot) return;
-      dot.classList.toggle("cm-dot--selected", id === selectedId);
+      dot.classList.toggle("cm-dot--selected", key === selectedPlace);
     });
   }, [selectedId]);
 

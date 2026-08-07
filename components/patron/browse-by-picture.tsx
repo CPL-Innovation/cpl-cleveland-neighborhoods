@@ -29,6 +29,12 @@ function matches(fp: FacetPhoto, f: Filters): boolean {
   return true;
 }
 
+// ⚠ The SECOND FacetPhoto→Photo adapter. `adaptFacetPhoto` in data.ts is the other, and they
+// differ on purpose: that one is for the *map*, so it drops records without coordinates and
+// projects x/y — this one keeps all 99, because browsing by what's in the picture doesn't
+// depend on knowing where the picture was taken. Any field added to Photo has to be added in
+// BOTH, or it silently arrives null on one surface (which is exactly how the then-and-now
+// toggle first failed to appear here).
 function toPhoto(fp: FacetPhoto): Photo {
   return {
     id: fp.chc_id, x: 0, y: 0, year: fp.year ?? 0,
@@ -37,6 +43,8 @@ function toPhoto(fp: FacetPhoto): Photo {
     photographer: "unknown", rights: "Public Domain (pre-1931)",
     branch: "Cleveland Public Library", note: null,
     thumb: fp.jpeg_url, caption: fp.caption, facets: fp.facets, aiExtracted: true,
+    rephotoEmbedUrl: fp.rephoto_embed_url ?? null,
+    rephotoBearing: fp.rephoto_bearing ?? null,
   };
 }
 
