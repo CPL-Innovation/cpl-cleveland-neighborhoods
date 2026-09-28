@@ -58,6 +58,7 @@ export function ScanFinalize() {
       const res = await scanApi.finalizeRun();
       nav.toast(
         `Finalized ${res.processed}: ${res.finalized} placed · ${res.needPins} need pins` +
+          (res.retried ? ` · ${res.retried} recovered from an earlier geocoder outage` : "") +
           (res.skipped ? ` · ${res.skipped} already done` : ""),
         res.needPins ? "info" : "ok"
       );
@@ -71,6 +72,7 @@ export function ScanFinalize() {
 
   const active = rows.find((r) => r.chc_id === activeId) || null;
   const pending = counts?.pending ?? 0;
+  const stalled = counts?.stalled ?? 0;
 
   if (loading) return <Centered t={t}>Loading the Finalize worklist…</Centered>;
   if (err)
@@ -99,6 +101,9 @@ export function ScanFinalize() {
             {(counts?.needs_pin ?? 0) > 0 && (
               <> · <span style={{ color: t.terracotta, fontWeight: 600 }}>{counts?.needs_pin}</span> awaiting pins</>
             )}
+            {stalled > 0 && (
+              <> (<span style={{ color: t.ochre, fontWeight: 600 }}>{stalled}</span> stalled on the geocoder, retriable)</>
+            )}
             {pending > 0 && <> · <span style={{ color: t.inkMuted }}>{pending} pending</span></>}
             {" · "}
             <span style={{ color: (counts?.viewpoints ?? 0) > 0 ? t.teal : t.inkMuted }}>
@@ -108,11 +113,23 @@ export function ScanFinalize() {
         </div>
         <button
           onClick={runFinalize}
-          disabled={running || pending === 0}
-          title={pending === 0 ? "nothing pending — all reviewed box-scans are normalized" : "normalize the pending reviewed set into the unified Photos table"}
-          style={{ ...pillBtn(t, true), height: 34, opacity: running || pending === 0 ? 0.5 : 1 }}
+          disabled={running || (pending === 0 && stalled === 0)}
+          title={
+            pending === 0 && stalled === 0
+              ? "nothing pending — all reviewed box-scans are normalized"
+              : stalled > 0 && pending === 0
+                ? "re-geocode the photographs whose address the geocoder never answered for"
+                : "normalize the pending reviewed set into the unified Photos table"
+          }
+          style={{ ...pillBtn(t, true), height: 34, opacity: running || (pending === 0 && stalled === 0) ? 0.5 : 1 }}
         >
-          {running ? "Finalizing…" : pending > 0 ? `Finalize ${pending} pending` : "All finalized"}
+          {running
+            ? "Finalizing…"
+            : pending > 0
+              ? `Finalize ${pending} pending`
+              : stalled > 0
+                ? `Retry ${stalled} stalled`
+                : "All finalized"}
         </button>
       </div>
 
@@ -223,6 +240,16 @@ function StateLine({ t, row }: { t: typeof STAFF_TOKENS; row: FinalizeRow }) {
       </span>
       {row.state === "needs_pin" && row.miss_reason && (
         <span style={{ fontSize: 11.5, color: t.inkMuted, fontStyle: "italic" }}>{row.miss_reason}</span>
+      )}
+      {/* A provider failure is not a verdict about the address — say so, or staff will pin by hand
+          the photographs the next run could place for them. */}
+      {row.retriable && (
+        <span style={{
+          fontFamily: t.mono, fontSize: 10, color: t.ochre, background: t.ochreSoft,
+          border: `1px solid ${t.ochre}44`, padding: "2px 7px", borderRadius: 3,
+        }}>
+          the geocoder never gave a verdict · Finalize will ask again
+        </span>
       )}
     </div>
   );
