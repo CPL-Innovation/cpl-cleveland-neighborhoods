@@ -24,6 +24,10 @@ export interface StaffRecord {
   themes?: string[];
   geo?: string;
   conf?: string;
+  // The archival coordinate, when the record has one. Kept alongside the `geo` label because a
+  // real number is needed to open Street View at the corner (the then-and-now tray).
+  lat?: number | null;
+  lng?: number | null;
   caption?: string;
   status?: string;
   alt?: string;
@@ -108,6 +112,8 @@ export function adaptBoxScanToStaff(p: BoxScanStaffPhoto): StaffRecord {
     themes: p.building_type ? [p.building_type.replace(/_/g, " ")] : [],
     geo: hasGeo ? "exact" : "missing",
     conf: hasGeo ? "1" : "—",
+    lat: p.lat,
+    lng: p.lng,
     caption: p.caption ? "good" : "placeholder",
     status: p.public_status || "draft",
     alt: p.has_alt ? "ok" : "—",
@@ -145,6 +151,8 @@ export function adaptHarvestedToStaff(r: HarvestedRecord, i: number): StaffRecor
     themes,
     geo: hasGeo ? "exact" : "missing",
     conf: hasGeo ? "1" : "—",
+    lat: hasGeo ? Number(r.lat) : null,
+    lng: hasGeo ? Number(r.lng) : null,
     caption: "placeholder",
     status: "draft",
     alt: "—",

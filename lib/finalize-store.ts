@@ -243,32 +243,10 @@ export async function finalizeAll(): Promise<FinalizeRunResult> {
  * Passing an empty string clears the viewpoint.
  */
 export async function setRephoto(chcId: string, embedUrl: string): Promise<{ cleared: boolean; bearing: number | null }> {
-  const { getDb } = await import("@/lib/db");
-  const { photoEnrichment } = await import("@/drizzle/schema");
-  const { and, eq } = await import("drizzle-orm");
-  const db = getDb();
-
-  const clearing = !embedUrl.trim();
-  const framing = clearing ? null : (await import("@/lib/rephoto")).parseRephotoEmbed(embedUrl);
-
-  const res = await db
-    .update(photoEnrichment)
-    .set({
-      rephotoEmbedUrl: framing?.embedUrl ?? null,
-      rephotoModernLat: framing?.lat != null ? String(framing.lat) : null,
-      rephotoModernLng: framing?.lng != null ? String(framing.lng) : null,
-      rephotoBearing: framing?.bearing != null ? String(framing.bearing) : null,
-      rephotoPitch: framing?.pitch != null ? String(framing.pitch) : null,
-      // Eligibility is a *claim about the photo* (can this corner be re-shot?), so a cleared
-      // viewpoint leaves it alone rather than retracting the judgement.
-      ...(clearing ? {} : { rephotoEligible: true }),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(photoEnrichment.id, chcId), eq(photoEnrichment.source, "box_scan")))
-    .returning({ id: photoEnrichment.id });
-
-  if (!res.length) throw new Error(`${chcId} is not a normalized box-scan — run Finalize first`);
-  return { cleared: clearing, bearing: framing?.bearing ?? null };
+  // The write itself is source-agnostic and lives in lib/rephoto-store.ts — a ContentDM photograph
+  // can carry a viewpoint too. This wrapper just pins the Finalize stage to the box-scan side.
+  const { setRephoto: write } = await import("@/lib/rephoto-store");
+  return write(chcId, embedUrl, { source: "box_scan" });
 }
 
 export async function setPin(chcId: string, lat: number, lng: number): Promise<void> {
