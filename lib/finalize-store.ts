@@ -14,7 +14,7 @@
 // Local-only, like the other ingest doors: geocoding reaches the network from a local job, so the
 // routes gate on finalizeEnabled() and 403 in serverless.
 import type { ScanRecord } from "@/lib/types";
-import { ambiguityReason, geocodeAddress, geocodeThrottle, type GeoSource } from "@/lib/geocode";
+import { ambiguityReason, geocodeAddress, geocodeThrottle, type GeoMissKind, type GeoSource } from "@/lib/geocode";
 
 const CAPTION_SOURCE = "vlm_tier1";
 const DATE_SOURCE = "archival_stamp"; // pilot simplification: the stamp = cataloging date, flagged
@@ -64,7 +64,9 @@ export function parseStampDate(yearRaw: string): { dateStart: string; precision:
 // ── List shape for the Finalize surface ──
 export type FinalizeState = "pending" | "finalized" | "needs_pin";
 /** `viewpoints` = how many have a then-and-now recorded — the curation progress signal. */
-export type FinalizeCounts = Record<FinalizeState | "reviewed" | "total" | "viewpoints", number>;
+// `stalled` = needs_pin rows the geocoder never actually got an answer for (a provider failure).
+// They are the retriable subset, and the Finalize button offers to pick them back up.
+export type FinalizeCounts = Record<FinalizeState | "reviewed" | "total" | "viewpoints" | "stalled", number>;
 export interface FinalizeRow {
   chc_id: string;
   jpeg_url: string;
@@ -77,7 +79,9 @@ export interface FinalizeRow {
   lng: number | null;
   date_start: string | null;
   geo_source: string | null;
-  miss_reason: string | null; // why it needs a pin (when state = needs_pin)
+  miss_reason: string | null; // why it needs a pin (when state = needs_pin) — stored, not guessed
+  miss_kind: GeoMissKind | null; // ambiguous | no_match → a human pins it · provider → the next run retries
+  retriable: boolean; // the geocoder never gave a verdict — the next Finalize run asks again
   rephoto_embed_url: string | null; // the staff-framed then-and-now viewpoint, if recorded
   rephoto_bearing: number | null; // unpacked from that URL — a compass check on the framing
 }
@@ -89,6 +93,7 @@ interface UnifiedRow {
   lng: string | null;
   dateStart: string | null;
   geoSource: string | null;
+  geoMissReason: string | null;
   addressRaw: string | null;
   rephotoEmbedUrl: string | null;
   rephotoBearing: string | null;
@@ -106,6 +111,7 @@ async function unifiedBoxScans(): Promise<Map<string, UnifiedRow>> {
       lng: photoEnrichment.lng,
       dateStart: photoEnrichment.dateStart,
       geoSource: photoEnrichment.geoSource,
+      geoMissReason: photoEnrichment.geoMissReason,
       addressRaw: photoEnrichment.addressRaw,
       rephotoEmbedUrl: photoEnrichment.rephotoEmbedUrl,
       rephotoBearing: photoEnrichment.rephotoBearing,
@@ -113,6 +119,44 @@ async function unifiedBoxScans(): Promise<Map<string, UnifiedRow>> {
     .from(photoEnrichment)
     .where(eq(photoEnrichment.source, "box_scan"));
   return new Map(rows.map((r) => [r.id, r as UnifiedRow]));
+}
+
+/** `geo_miss_reason` is stored as "<kind>: <reason>" — one column, both facts, no join. */
+function joinMiss(kind: GeoMissKind, reason: string): string {
+  return `${kind}: ${reason}`;
+}
+function splitMiss(stored: string | null | undefined): { kind: GeoMissKind | null; reason: string | null } {
+  if (!stored) return { kind: null, reason: null };
+  const m = /^(ambiguous|no_match|provider):\s*(.*)$/.exec(stored);
+  return m ? { kind: m[1] as GeoMissKind, reason: m[2] } : { kind: null, reason: stored };
+}
+
+/**
+ * Does this photograph need another Finalize pass?
+ *
+ * The original rule was "already normalized → skip forever", on the theory that a miss is resolved
+ * by a librarian's pin rather than a re-run. That quietly froze two different kinds of staleness:
+ *
+ *   • A PROVIDER FAILURE recorded as a verdict. OpenStreetMap is a keyless public service that
+ *     occasionally times out or rate-limits; a two-second outage parked a photograph in the pin
+ *     tray permanently, indistinguishable from an address OSM genuinely can't place.
+ *   • A REVIEW EDIT after normalization. The unified row's `address_raw` is a copy of the confirmed
+ *     Tier-1 address; when a librarian corrects that address in Review afterwards, the copy — and
+ *     the geocode verdict derived from it — is about a string nobody stands behind any more.
+ *
+ * So: the review is the source of truth, a provider failure is transient, and an ambiguous shape or
+ * a genuine "no such house number" is a human's job we leave alone. Rows written before
+ * `geo_miss_reason` existed carry no verdict at all; a geocodable-looking one gets exactly ONE
+ * re-attempt, after which it carries a real reason and this converges.
+ */
+function needsAnotherPass(u: UnifiedRow | undefined, address: string | null): boolean {
+  if (!u?.captionSource) return true; // never normalized
+  if (u.lat != null && u.lng != null) return false; // already placed (geocoded or pinned)
+  if ((u.addressRaw ?? "") !== (address ?? "")) return true; // the confirmed address moved under it
+  const kind = splitMiss(u.geoMissReason).kind;
+  if (kind === "provider") return true;
+  if (kind === null) return !ambiguityReason(address); // legacy row — ask once, then settle
+  return false;
 }
 
 function deriveState(u: UnifiedRow | undefined): FinalizeState {
@@ -145,7 +189,12 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Fin
       lng,
       date_start: u?.dateStart ?? null,
       geo_source: u?.geoSource ?? null,
-      miss_reason: state === "needs_pin" ? (ambiguityReason(address) ?? "geocoder couldn't resolve") : null,
+      // The reason is read back, not recomputed: the batch knows whether OSM said "no such
+      // house number" or never answered at all, and only it can tell us. Older rows written
+      // before the column existed fall back to the pre-network classifier.
+      miss_reason: state === "needs_pin" ? (splitMiss(u?.geoMissReason).reason ?? ambiguityReason(address) ?? "not yet attempted") : null,
+      miss_kind: state === "needs_pin" ? (splitMiss(u?.geoMissReason).kind ?? (ambiguityReason(address) ? "ambiguous" : null)) : null,
+      retriable: state === "needs_pin" && needsAnotherPass(u, address),
       rephoto_embed_url: u?.rephotoEmbedUrl ?? null,
       rephoto_bearing: u?.rephotoBearing != null ? Number(u.rephotoBearing) : null,
     };
@@ -157,6 +206,7 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Fin
     pending: rows.filter((r) => r.state === "pending").length,
     finalized: rows.filter((r) => r.state === "finalized").length,
     needs_pin: rows.filter((r) => r.state === "needs_pin").length,
+    stalled: rows.filter((r) => r.retriable).length,
     viewpoints: rows.filter((r) => r.rephoto_embed_url).length,
   } as FinalizeCounts;
 
@@ -166,7 +216,8 @@ export async function listFinalize(): Promise<{ rows: FinalizeRow[]; counts: Fin
 // ── The Finalize button: batch-normalize the pending reviewed set into the unified table ──
 async function writeNormalized(
   rec: ScanRecord,
-  geo: { lat: number; lng: number; geoSource: GeoSource; geoConfidence: string } | null
+  geo: { lat: number; lng: number; geoSource: GeoSource; geoConfidence: string } | null,
+  miss?: { kind: GeoMissKind; reason: string } | null
 ): Promise<void> {
   const { getDb } = await import("@/lib/db");
   const { photoEnrichment } = await import("@/drizzle/schema");
@@ -186,6 +237,10 @@ async function writeNormalized(
     lng: geo ? String(geo.lng) : null,
     geoSource: geo?.geoSource ?? null,
     geoConfidence: geo?.geoConfidence ?? null,
+    // A coordinate clears the miss; a miss records itself. Both directions matter — a row that
+    // resolves on a later run must stop advertising the outage that once stalled it.
+    geoMissReason: geo ? null : miss ? joinMiss(miss.kind, miss.reason) : null,
+    geoMissAt: geo ? null : miss ? new Date() : null,
     publicStatus: "draft",
     updatedAt: new Date(),
   };
@@ -199,10 +254,14 @@ export interface FinalizeRunResult {
   processed: number;
   finalized: number; // got coordinates
   needPins: number; // normalized but geocode missed → staff tray
-  skipped: number; // already normalized
+  skipped: number; // already normalized and settled
+  retried: number; // stalled by a provider failure on an earlier run, resolved by this one
 }
 
-/** Run the batch over the reviewed set. Resumable: rows already normalized are skipped (no re-geocode). */
+/**
+ * Run the batch over the reviewed set. Resumable: settled rows are skipped, but rows a provider
+ * failure stalled are picked back up (see isRetriable).
+ */
 export async function finalizeAll(): Promise<FinalizeRunResult> {
   const { listRecords } = await import("@/lib/scan-store");
   const [records, unified] = await Promise.all([listRecords(), unifiedBoxScans()]);
@@ -212,26 +271,29 @@ export async function finalizeAll(): Promise<FinalizeRunResult> {
   let finalized = 0;
   let needPins = 0;
   let skipped = 0;
+  let retried = 0;
 
   for (const rec of reviewed) {
-    if (unified.get(rec.chc_id)?.captionSource) {
-      skipped++;
-      continue; // already normalized — leave it (pins resolve via setPin, not a re-run)
-    }
     const { address } = confirmedTier1(rec);
+    const u = unified.get(rec.chc_id);
+    if (!needsAnotherPass(u, address)) {
+      skipped++;
+      continue; // normalized and settled — a pin resolves it now, not a re-run
+    }
     const geo = await geocodeAddress(address);
     if (geo.ok) {
       await writeNormalized(rec, { lat: geo.lat, lng: geo.lng, geoSource: geo.geoSource, geoConfidence: geo.geoConfidence });
       finalized++;
+      if (u?.captionSource) retried++;
     } else {
-      await writeNormalized(rec, null);
+      await writeNormalized(rec, null, { kind: geo.kind, reason: geo.reason });
       needPins++;
     }
     processed++;
     // Only the network provider needs throttling; ambiguous addresses skip the call entirely.
-    if (geo.ok || (geo.reason !== "no address" && !ambiguityReason(address))) await geocodeThrottle();
+    if (geo.ok || geo.kind !== "ambiguous") await geocodeThrottle();
   }
-  return { processed, finalized, needPins, skipped };
+  return { processed, finalized, needPins, skipped, retried };
 }
 
 // ── The pin tray: staff drops a coordinate on a geocode miss (geo_source = staff_lookup) ──
@@ -243,32 +305,10 @@ export async function finalizeAll(): Promise<FinalizeRunResult> {
  * Passing an empty string clears the viewpoint.
  */
 export async function setRephoto(chcId: string, embedUrl: string): Promise<{ cleared: boolean; bearing: number | null }> {
-  const { getDb } = await import("@/lib/db");
-  const { photoEnrichment } = await import("@/drizzle/schema");
-  const { and, eq } = await import("drizzle-orm");
-  const db = getDb();
-
-  const clearing = !embedUrl.trim();
-  const framing = clearing ? null : (await import("@/lib/rephoto")).parseRephotoEmbed(embedUrl);
-
-  const res = await db
-    .update(photoEnrichment)
-    .set({
-      rephotoEmbedUrl: framing?.embedUrl ?? null,
-      rephotoModernLat: framing?.lat != null ? String(framing.lat) : null,
-      rephotoModernLng: framing?.lng != null ? String(framing.lng) : null,
-      rephotoBearing: framing?.bearing != null ? String(framing.bearing) : null,
-      rephotoPitch: framing?.pitch != null ? String(framing.pitch) : null,
-      // Eligibility is a *claim about the photo* (can this corner be re-shot?), so a cleared
-      // viewpoint leaves it alone rather than retracting the judgement.
-      ...(clearing ? {} : { rephotoEligible: true }),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(photoEnrichment.id, chcId), eq(photoEnrichment.source, "box_scan")))
-    .returning({ id: photoEnrichment.id });
-
-  if (!res.length) throw new Error(`${chcId} is not a normalized box-scan — run Finalize first`);
-  return { cleared: clearing, bearing: framing?.bearing ?? null };
+  // The write itself is source-agnostic and lives in lib/rephoto-store.ts — a ContentDM photograph
+  // can carry a viewpoint too. This wrapper just pins the Finalize stage to the box-scan side.
+  const { setRephoto: write } = await import("@/lib/rephoto-store");
+  return write(chcId, embedUrl, { source: "box_scan" });
 }
 
 export async function setPin(chcId: string, lat: number, lng: number): Promise<void> {

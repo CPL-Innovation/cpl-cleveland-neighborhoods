@@ -11,9 +11,10 @@ import React from "react";
 import dynamic from "next/dynamic";
 import {
   CLEVELAND_PHOTOS, MILLIONAIRES_ROW, CURATED_PHOTOS,
-  adaptHarvestedRecord, adaptFacetPhoto, type Photo, type HarvestedRecord,
+  adaptHarvestedRecord, adaptFacetPhoto, applyPatronEnrichment,
+  type Photo, type HarvestedRecord,
 } from "./data";
-import type { FacetPhoto } from "@/lib/types";
+import type { FacetPhoto, PatronEnrichment } from "@/lib/types";
 import { SearchIcon, SearchPanel, PhotoDetailPanel, StoryPanel } from "./panels";
 import { BrowseByPicture } from "./browse-by-picture";
 
@@ -40,21 +41,34 @@ export default function PatronLanding() {
   // ── Merge the pool: curated seed + harvested ContentDM + the unified box-scan 99 ──
   // The box-scans (live read of the unified enrichment store) carry geocoded coords from the
   // Finalize stage, so they place on the map alongside ContentDM records — one collection.
+  //
+  // The harvested records arrive in two halves that have to be put back together here: the CATALOG
+  // is a static file (a harvest snapshot, no DB), while anything staff have ENRICHED about those
+  // same photographs — today the then-and-now viewpoint — is a live read joined on the ContentDM
+  // id. Without that join a cataloged photo could never show a "now", however much work a
+  // librarian had done on it.
   React.useEffect(() => {
     let cancelled = false;
     const harvest = fetch("/data/tier3-all/records.json")
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("records.json missing"))))
       .then((raw: HarvestedRecord[]) => raw.map(adaptHarvestedRecord).filter((p): p is Photo => p !== null))
       .catch((err) => { console.warn("[harvest] using curated photos only:", err.message); return [] as Photo[]; });
+    const enrichment = fetch("/api/patron/enrichment")
+      .then((r) => (r.ok ? r.json() : { photos: [] }))
+      .then((d: { photos: PatronEnrichment[] }) => d.photos || [])
+      .catch(() => [] as PatronEnrichment[]);
     const boxScans = fetch("/api/patron/facets")
       .then((r) => (r.ok ? r.json() : { photos: [] }))
       .then((d: { photos: FacetPhoto[] }) => (d.photos || []).map(adaptFacetPhoto).filter((p): p is Photo => p !== null))
       .catch(() => [] as Photo[]);
 
-    Promise.all([harvest, boxScans]).then(([harvested, box]) => {
+    Promise.all([harvest, enrichment, boxScans]).then(([harvested, overlay, box]) => {
       if (cancelled) return;
-      setPhotos([...CLEVELAND_PHOTOS, ...harvested, ...box, ...MILLIONAIRES_ROW]);
-      console.log(`[map] ${harvested.length} ContentDM + ${box.length} box-scan placed on the map`);
+      const enriched = applyPatronEnrichment(harvested, overlay);
+      setPhotos([...CLEVELAND_PHOTOS, ...enriched, ...box, ...MILLIONAIRES_ROW]);
+      console.log(
+        `[map] ${harvested.length} ContentDM (${overlay.length} enriched) + ${box.length} box-scan placed on the map`,
+      );
     });
     return () => { cancelled = true; };
   }, []);

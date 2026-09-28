@@ -80,6 +80,13 @@ export const photoEnrichment = pgTable("photo_enrichment", {
   lng: numeric("lng"),
   geoConfidence: text("geo_confidence"),
   geoSource: text("geo_source"),
+  // Why this photo has no coordinate, when it has none — written by the Finalize batch, cleared
+  // once it resolves or a librarian pins it. Kept because the three kinds of miss need different
+  // work: `ambiguous:` and `no_match:` are a human's job, `provider:` is a transient failure the
+  // next run retries. Recomputing a generic "couldn't resolve" at read time lost that distinction,
+  // which is how a working geocoder came to look broken.
+  geoMissReason: text("geo_miss_reason"), // "<kind>: <human-readable reason>"
+  geoMissAt: timestamp("geo_miss_at", { withTimezone: true }), // when that attempt was made
   neighborhoodTag: text("neighborhood_tag"),
   secondaryNeighborhoodTag: text("secondary_neighborhood_tag"),
   branchServiceArea: text("branch_service_area"),

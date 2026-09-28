@@ -15,6 +15,9 @@ import {
   selectStyle,
   ChipInput,
 } from "@/components/staff/ui";
+import { RephotoTray } from "@/components/staff/rephoto-tray";
+import { staffApi } from "@/lib/staff-api";
+import type { RephotoRow } from "@/lib/rephoto-store";
 
 // Record Edit View — THE screen. 80% of the work.
 // Three columns: photo + annotations · enrichment fields · ContentDM source + map.
@@ -578,6 +581,11 @@ function RecordContextPane({ cur }: { cur: StaffRecord }) {
         </div>
       </div>
 
+      {/* Then & now — the modern viewpoint. The same tray the Finalize stage gives box-scans,
+          here for the cataloged side of the unified Photos table. This is the ONE real write on
+          this screen so far; everything else above is still the enrichment mockup. */}
+      <RecordRephoto cur={cur} />
+
       {/* Suggested next */}
       <div style={{ marginBottom: 16 }}>
         <div style={{
@@ -622,6 +630,54 @@ function RecordContextPane({ cur }: { cur: StaffRecord }) {
         <AiSugg label="Geo" status="dismissed" body="‘Statler Hotel, 700 Euclid Ave’ → suggests 41.5006°, 81.6907°"/>
       </div>
     </div>
+  );
+}
+
+/**
+ * The then-and-now tray for a record in the unified Photos table.
+ *
+ * A cataloged ContentDM photograph has no enrichment row until someone enriches it — the catalog
+ * is a static harvest — so the viewpoint write upserts one (lib/rephoto-store.ts). Box-scans get
+ * their tray in the Finalize stage; the one here still works for them (update-only), which is why
+ * the source travels with the save.
+ */
+function RecordRephoto({ cur }: { cur: StaffRecord }) {
+  const t = STAFF_TOKENS;
+  const [row, setRow] = React.useState<RephotoRow | null>(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const source = cur?.source;
+
+  const load = React.useCallback(() => {
+    if (!cur?.id || !source) return;
+    let cancelled = false;
+    staffApi.getRephoto(cur.id).then((r) => {
+      if (cancelled) return;
+      setRow(r);
+      setLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [cur?.id, source]);
+  React.useEffect(() => { setLoaded(false); return load(); }, [load]);
+
+  // The sample records aren't photographs — no source, no viewpoint to record.
+  if (!source) return null;
+  if (!loaded) {
+    return (
+      <div style={{ marginTop: 16, fontSize: 11.5, color: t.inkFaint, fontStyle: 'italic' }}>
+        Checking for a recorded viewpoint…
+      </div>
+    );
+  }
+  return (
+    <RephotoTray
+      recorded={row?.rephoto_embed_url ?? null}
+      bearing={row?.rephoto_bearing ?? null}
+      subjectLat={cur.lat}
+      subjectLng={cur.lng}
+      label={cur.id}
+      onSave={(u) => staffApi.setRephoto(cur.id, u, { source, contentdmUrl: cur.contentdmUrl ?? null })}
+      onSaved={load}
+    />
   );
 }
 

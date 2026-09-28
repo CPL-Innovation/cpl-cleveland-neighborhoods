@@ -12,9 +12,10 @@
 // Local-only (geocoding hits the network from a local job); the API 403s in serverless.
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
-import { describeBearing, parseRephotoEmbed } from "@/lib/rephoto";
+import { describeBearing } from "@/lib/rephoto";
 import { useNav } from "@/components/staff/nav";
-import { pillBtn, inputStyle, textareaStyle } from "@/components/staff/ui";
+import { pillBtn, inputStyle } from "@/components/staff/ui";
+import { RephotoTray } from "@/components/staff/rephoto-tray";
 import { scanApi } from "@/lib/scan-api";
 import type { FinalizeRow, FinalizeState, FinalizeCounts } from "@/lib/finalize-store";
 
@@ -57,6 +58,7 @@ export function ScanFinalize() {
       const res = await scanApi.finalizeRun();
       nav.toast(
         `Finalized ${res.processed}: ${res.finalized} placed · ${res.needPins} need pins` +
+          (res.retried ? ` · ${res.retried} recovered from an earlier geocoder outage` : "") +
           (res.skipped ? ` · ${res.skipped} already done` : ""),
         res.needPins ? "info" : "ok"
       );
@@ -70,6 +72,7 @@ export function ScanFinalize() {
 
   const active = rows.find((r) => r.chc_id === activeId) || null;
   const pending = counts?.pending ?? 0;
+  const stalled = counts?.stalled ?? 0;
 
   if (loading) return <Centered t={t}>Loading the Finalize worklist…</Centered>;
   if (err)
@@ -98,6 +101,9 @@ export function ScanFinalize() {
             {(counts?.needs_pin ?? 0) > 0 && (
               <> · <span style={{ color: t.terracotta, fontWeight: 600 }}>{counts?.needs_pin}</span> awaiting pins</>
             )}
+            {stalled > 0 && (
+              <> (<span style={{ color: t.ochre, fontWeight: 600 }}>{stalled}</span> stalled on the geocoder, retriable)</>
+            )}
             {pending > 0 && <> · <span style={{ color: t.inkMuted }}>{pending} pending</span></>}
             {" · "}
             <span style={{ color: (counts?.viewpoints ?? 0) > 0 ? t.teal : t.inkMuted }}>
@@ -107,11 +113,23 @@ export function ScanFinalize() {
         </div>
         <button
           onClick={runFinalize}
-          disabled={running || pending === 0}
-          title={pending === 0 ? "nothing pending — all reviewed box-scans are normalized" : "normalize the pending reviewed set into the unified Photos table"}
-          style={{ ...pillBtn(t, true), height: 34, opacity: running || pending === 0 ? 0.5 : 1 }}
+          disabled={running || (pending === 0 && stalled === 0)}
+          title={
+            pending === 0 && stalled === 0
+              ? "nothing pending — all reviewed box-scans are normalized"
+              : stalled > 0 && pending === 0
+                ? "re-geocode the photographs whose address the geocoder never answered for"
+                : "normalize the pending reviewed set into the unified Photos table"
+          }
+          style={{ ...pillBtn(t, true), height: 34, opacity: running || (pending === 0 && stalled === 0) ? 0.5 : 1 }}
         >
-          {running ? "Finalizing…" : pending > 0 ? `Finalize ${pending} pending` : "All finalized"}
+          {running
+            ? "Finalizing…"
+            : pending > 0
+              ? `Finalize ${pending} pending`
+              : stalled > 0
+                ? `Retry ${stalled} stalled`
+                : "All finalized"}
         </button>
       </div>
 
@@ -180,7 +198,17 @@ export function ScanFinalize() {
                 </Section>
 
                 {active.state === "needs_pin" && <PinTray t={t} row={active} onSaved={load} nav={nav} />}
-                {active.state === "finalized" && <RephotoTray t={t} row={active} onSaved={load} nav={nav} />}
+                {active.state === "finalized" && (
+                  <RephotoTray
+                    recorded={active.rephoto_embed_url}
+                    bearing={active.rephoto_bearing}
+                    subjectLat={active.lat}
+                    subjectLng={active.lng}
+                    label={active.chc_id}
+                    onSave={(u) => scanApi.finalizeRephoto(active.chc_id, u)}
+                    onSaved={load}
+                  />
+                )}
 
                 {active.state === "pending" && (
                   <div style={{ marginTop: 16, fontSize: 12.5, color: t.inkMuted, lineHeight: 1.5 }}>
@@ -212,6 +240,16 @@ function StateLine({ t, row }: { t: typeof STAFF_TOKENS; row: FinalizeRow }) {
       </span>
       {row.state === "needs_pin" && row.miss_reason && (
         <span style={{ fontSize: 11.5, color: t.inkMuted, fontStyle: "italic" }}>{row.miss_reason}</span>
+      )}
+      {/* A provider failure is not a verdict about the address — say so, or staff will pin by hand
+          the photographs the next run could place for them. */}
+      {row.retriable && (
+        <span style={{
+          fontFamily: t.mono, fontSize: 10, color: t.ochre, background: t.ochreSoft,
+          border: `1px solid ${t.ochre}44`, padding: "2px 7px", borderRadius: 3,
+        }}>
+          the geocoder never gave a verdict · Finalize will ask again
+        </span>
       )}
     </div>
   );
@@ -256,146 +294,6 @@ function PinTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: Finali
       <a href={lookupUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: t.teal }}>
         ↗ Find coordinates for “{row.address || row.chc_id}” on OpenStreetMap
       </a>
-    </div>
-  );
-}
-
-/**
- * Then-and-now: record the modern viewpoint.
- *
- * The librarian walks Street View to where the photographer stood, frames the shot to match,
- * then pastes Google's "Share → Embed a map" URL. We keep the URL and unpack its camera
- * geometry (see lib/rephoto.ts) — the bearing read-back below is the check that the framing
- * is the one they meant, without having to trust an opaque string.
- */
-function RephotoTray({ t, row, onSaved, nav }: { t: typeof STAFF_TOKENS; row: FinalizeRow; onSaved: () => void; nav: ReturnType<typeof useNav> }) {
-  const [url, setUrl] = React.useState(row.rephoto_embed_url ?? "");
-  const [saving, setSaving] = React.useState(false);
-  const [serverError, setServerError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    setUrl(row.rephoto_embed_url ?? "");
-    setServerError(null);
-  }, [row.chc_id, row.rephoto_embed_url]);
-
-  const recorded = !!row.rephoto_embed_url;
-  const dirty = url.trim() !== (row.rephoto_embed_url ?? "");
-
-  // Validate as they paste, not on the server after the fact. The parser is a pure function,
-  // so the same rule that guards the write can explain itself here — a rejected paste used to
-  // surface only as a 400 and a toast that disappeared, which read as "nothing happened".
-  const check = React.useMemo(() => {
-    if (!url.trim()) return null;
-    try {
-      return { ok: true as const, framing: parseRephotoEmbed(url) };
-    } catch (e) {
-      return { ok: false as const, message: (e as Error).message };
-    }
-  }, [url]);
-  // The archival coordinate is the subject; Street View opens there so the walk starts at the corner.
-  const streetViewUrl =
-    row.lat != null && row.lng != null
-      ? `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${row.lat},${row.lng}`
-      : null;
-
-  const save = async (next: string) => {
-    setSaving(true);
-    setServerError(null);
-    try {
-      const res = await scanApi.finalizeRephoto(row.chc_id, next);
-      nav.toast(
-        res.cleared
-          ? `Cleared the viewpoint for ${row.chc_id}`
-          : `Viewpoint saved · facing ${res.bearing != null ? describeBearing(res.bearing) : "—"}`,
-        "ok",
-      );
-      onSaved();
-    } catch (e) {
-      // Keep it on screen: a toast is the wrong home for something you need while editing.
-      setServerError((e as Error).message);
-      nav.toast((e as Error).message, "warn");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ marginTop: 16, padding: 14, border: `1px solid ${t.border}`, background: t.bgSurface, borderRadius: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 12.5, color: t.ink, fontWeight: 500 }}>Then &amp; now — the modern viewpoint</span>
-        {recorded && (
-          <span style={{ fontFamily: t.mono, fontSize: 10, color: t.sage, background: t.sageSoft, padding: "2px 7px", borderRadius: 3 }}>
-            recorded{row.rephoto_bearing != null ? ` · facing ${describeBearing(row.rephoto_bearing)}` : ""}
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 11.5, color: t.inkMuted, lineHeight: 1.5, marginBottom: 8 }}>
-        Stand where the photographer stood, match the framing, then paste Google&rsquo;s{" "}
-        <b>Share &rarr; Embed a map</b> link. The whole <code>&lt;iframe&gt;</code> is fine — we&rsquo;ll take the URL out of it.
-      </div>
-      <textarea
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        placeholder="https://www.google.com/maps/embed?pb=…"
-        rows={2}
-        style={{ ...textareaStyle(t), fontFamily: t.mono, fontSize: 10.5, marginBottom: 8 }}
-      />
-      {check && !check.ok && (
-        <div style={{
-          marginBottom: 8, padding: "8px 10px", borderRadius: 5,
-          background: t.ochreSoft, border: `1px solid ${t.ochre}44`, color: t.ochre,
-          fontSize: 11.5, lineHeight: 1.5,
-        }}>
-          <b>That isn&rsquo;t an embed link.</b> {check.message}
-          <div style={{ color: t.inkMuted, marginTop: 4 }}>
-            In Street View use <b>Share &rarr; Embed a map</b> (not &ldquo;Copy link&rdquo;, and not the address bar) —
-            only that tab gives a URL Google allows us to display.
-          </div>
-        </div>
-      )}
-
-      {check?.ok && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontFamily: t.mono, fontSize: 10.5, color: t.sage, marginBottom: 6 }}>
-            ✓ camera {check.framing.lat?.toFixed(5)}, {check.framing.lng?.toFixed(5)}
-            {check.framing.bearing != null ? ` · facing ${describeBearing(check.framing.bearing)}` : ""}
-            {check.framing.pitch != null ? ` · pitch ${check.framing.pitch.toFixed(1)}°` : ""}
-          </div>
-          {/* Confirm the framing before committing it — the job is matching a photograph. */}
-          <iframe
-            src={check.framing.embedUrl}
-            title="Street View preview"
-            loading="lazy"
-            referrerPolicy="strict-origin-when-cross-origin"
-            style={{ width: "100%", height: 150, border: `1px solid ${t.border}`, borderRadius: 5, display: "block" }}
-          />
-        </div>
-      )}
-
-      {serverError && (
-        <div style={{
-          marginBottom: 8, padding: "8px 10px", borderRadius: 5,
-          background: `${t.terracotta}14`, border: `1px solid ${t.terracotta}44`, color: t.terracotta,
-          fontSize: 11.5, lineHeight: 1.5,
-        }}>
-          Save failed — {serverError}
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => save(url)} disabled={!dirty || saving || check?.ok === false} style={{ ...pillBtn(t, true), opacity: !dirty || saving || check?.ok === false ? 0.5 : 1 }}>
-          {saving ? "Saving…" : recorded ? "Update viewpoint" : "Save viewpoint"}
-        </button>
-        {recorded && (
-          <button onClick={() => { setUrl(""); save(""); }} disabled={saving} style={{ ...pillBtn(t) }}>
-            Clear
-          </button>
-        )}
-        {streetViewUrl && (
-          <a href={streetViewUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: t.teal }}>
-            ↗ Open Street View at this address
-          </a>
-        )}
-      </div>
     </div>
   );
 }

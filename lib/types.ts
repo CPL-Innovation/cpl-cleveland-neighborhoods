@@ -124,6 +124,20 @@ export interface ArchivalMarkupItem {
   kind: ArchivalMarkupKind;
 }
 
+// Which side of the unified Photos table a row belongs to (photo_enrichment.source).
+export type PhotoSource = "box_scan" | "contentdm";
+
+// The patron-visible enrichment overlay for a HARVESTED ContentDM photograph. The catalog itself
+// stays a static harvest (data/tier3-all/records.json); this is the live, read-only layer the
+// enrichment store adds on top of it, keyed by the ContentDM id. Today it carries the then-and-now
+// viewpoint; anything else staff enrich on a cataloged photo belongs here too.
+export interface PatronEnrichment {
+  contentdm_id: string;
+  /** Staff-framed Street View embed for the then-and-now. Null = no modern viewpoint recorded. */
+  rephoto_embed_url: string | null;
+  rephoto_bearing: number | null;
+}
+
 // One faceted photo as the patron convergence slice consumes it (live read of the enrichment
 // store — vlm-facet-spec / convergence-slice-spec). facets = the graduated v0.5 record;
 // caption/year/address come from the box-scan's Tier-1 record. Read-only on the patron side.

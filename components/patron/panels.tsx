@@ -171,8 +171,159 @@ export function PhotoDetailPanel({
   // as undated, not as the year zero.
   const dated = Number.isFinite(photo.year) && photo.year > 0;
 
-  const [view, setView] = React.useState<"then" | "now">("then");
+  // Two shells, one content. The drawer is the reading view — it sits beside the map so you keep
+  // your place in the city. Expanded is the LOOKING view: the whole point of a then-and-now is
+  // comparing two images, and 480px of drawer can't hold both at a size worth comparing.
+  const [expanded, setExpanded] = React.useState(false);
+  const [view, setView] = React.useState<PhotoView>("then");
+  const vw = useViewportWidth();
+  // Below this two image panes side by side are each too narrow to read, so "both" stacks them.
+  const stackCompare = vw < 660;
+
   React.useEffect(() => { if (!rephotoUrl) setView("then"); }, [rephotoUrl, photo.id]);
+  // Side-by-side only exists in the expanded shell; collapsing has to land somewhere real.
+  React.useEffect(() => { if (!expanded && view === "both") setView("then"); }, [expanded, view]);
+
+  // Esc peels one layer at a time — expanded → drawer → closed. The landing has its own window
+  // Esc handler that closes the panel outright, so this one listens in the CAPTURE phase and
+  // stops the event when there's still a layer to peel.
+  React.useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [expanded]);
+
+  // Open the rail at the top: expanding, or stepping to another photograph in the corner
+  // sequence, should not land you halfway down the last one's metadata.
+  const railRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => { if (railRef.current) railRef.current.scrollTop = 0; }, [expanded, photo.id]);
+
+  const media = (
+    <PhotoMedia
+      photo={photo}
+      dated={dated}
+      rephotoUrl={rephotoUrl}
+      view={view}
+      onView={(v) => {
+        // Asking for the comparison in the drawer is asking for the room to do it.
+        if (v === "both" && !expanded) setExpanded(true);
+        setView(v);
+      }}
+      expanded={expanded}
+      stackCompare={stackCompare}
+      onExpand={() => setExpanded(true)}
+    />
+  );
+
+  const facts = (
+    <PhotoFacts
+      photo={photo}
+      corner={corner}
+      hasSequence={hasSequence}
+      neighbors={neighbors}
+      dated={dated}
+      onOpenPhoto={onOpenPhoto}
+    />
+  );
+
+  const chrome = (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+      padding: "14px 18px", borderBottom: "1px solid #EEE6D6", flexShrink: 0,
+    }}>
+      <div style={{
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#6B6359",
+      }}>{dated ? `Photo · ${photo.year}` : "Photo · date unknown"}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          title={expanded ? "Back to the map (esc)" : "Open larger"}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: "1px solid #EEE6D6", borderRadius: 6,
+            padding: "5px 9px", cursor: "pointer", color: "#3D3833",
+            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase",
+          }}
+        >
+          <ExpandGlyph collapsed={expanded} />
+          {expanded ? "Close up" : "Expand"}
+        </button>
+        <button onClick={onClose} title="Close" style={{
+          background: "none", border: "none", cursor: "pointer",
+          fontSize: 20, lineHeight: 1, color: "#6B6359", padding: "0 4px",
+        }}>×</button>
+      </div>
+    </div>
+  );
+
+  if (expanded) {
+    // One rail, two columns: the image gets the room, the words stay legible beside it. Under
+    // ~1100px the rail drops below the image rather than squeezing both.
+    const narrow = vw < 1100;
+    // The comparison needs roughly twice the picture width of a single image, so the shell grows
+    // for it — capped at a single archival print's worth of enlargement rather than the whole
+    // monitor, and the metadata rail gives back 40px, because the two photographs are the reason
+    // you opened this view. Under the single-image cap it stays the calmer reading-sized dialog.
+    const wide = view === "both";
+    // Fit the shell to the pictures rather than the other way round: the panes are 4:3, so the
+    // width this monitor allows implies a height — anything past it is empty dialog under the
+    // photographs. The comparison needs roughly twice the picture width, hence the wider cap.
+    const dialogW = wide ? Math.min(2000, vw * 0.96) : Math.min(1240, vw * 0.94);
+    const railW = narrow ? 0 : wide ? 380 : 420;
+    const paneW = (dialogW - railW - 36 - (wide ? 10 : 0)) / (wide ? 2 : 1);
+    const fitH = Math.round(paneW * 0.75 + (wide ? 150 : 128)); // panes + caption + toggle + padding
+    return (
+      <>
+        <div onClick={onClose} style={{
+          position: "absolute", inset: 0, zIndex: 59,
+          background: "rgba(26,24,20,0.55)", backdropFilter: "blur(2px)",
+        }} />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={photo.title}
+          style={{
+            position: "absolute", zIndex: 60,
+            top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: wide ? "min(2000px, 96%)" : "min(1240px, 94%)",
+            height: `min(${fitH}px, ${wide ? 94 : 92}%)`,
+            transition: "width 220ms cubic-bezier(.2,.8,.2,1), height 220ms cubic-bezier(.2,.8,.2,1)",
+            background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 12,
+            boxShadow: "0 24px 80px rgba(26,24,20,0.35)", overflow: "hidden",
+            display: "grid",
+            gridTemplateColumns: narrow ? "1fr" : `1fr ${wide ? 380 : 420}px`,
+            // Narrow: the image keeps the larger share and the rail scrolls in what's left —
+            // an `auto` second row lets the text push the photograph off the top of the dialog.
+            gridTemplateRows: narrow ? "minmax(0,1.15fr) minmax(0,1fr)" : "1fr",
+            animation: "patronZoomIn 200ms cubic-bezier(.2,.8,.2,1)",
+          }}
+        >
+          <style>{`@keyframes patronZoomIn { from { transform: translate(-50%,-50%) scale(.97); opacity: 0;} to { transform: translate(-50%,-50%) scale(1); opacity: 1;} }`}</style>
+
+          <div style={{
+            minWidth: 0, minHeight: 0, padding: 18,
+            display: "flex", flexDirection: "column", background: "#F6F2EB",
+            borderRight: narrow ? "none" : "1px solid #EEE6D6",
+            borderBottom: narrow ? "1px solid #EEE6D6" : "none",
+          }}>
+            {media}
+          </div>
+
+          <div style={{ minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", background: "#FFFFFF" }}>
+            {chrome}
+            <div ref={railRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingTop: 4 }}>{facts}</div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -185,255 +336,361 @@ export function PhotoDetailPanel({
         animation: "patronSlideIn 260ms cubic-bezier(.2,.8,.2,1)",
       }}>
         <style>{`@keyframes patronSlideIn { from { transform: translateX(40px); opacity: 0;} to { transform: translateX(0); opacity:1;} }`}</style>
+        {chrome}
+        <div ref={railRef} style={{ flex: 1, overflowY: "auto" }}>
+          {/* The toggle row now sits *under* the image rather than floating over it (it has three
+              segments and an attribution line to carry), so the block is taller than the old 280. */}
+          <div style={{ margin: 18, height: 344, display: "flex" }}>{media}</div>
+          {facts}
+        </div>
+      </div>
+    </>
+  );
+}
 
+type PhotoView = "then" | "now" | "both";
+
+/** Window width, for the two layout thresholds the panel can't express in inline styles. */
+function useViewportWidth(): number {
+  const [w, setW] = React.useState(() => (typeof window === "undefined" ? 1280 : window.innerWidth));
+  React.useEffect(() => {
+    const onResize = () => setW(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return w;
+}
+
+// ── The image itself: then · now · side by side ─────────────────
+
+function PhotoMedia({
+  photo, dated, rephotoUrl, view, onView, expanded, stackCompare, onExpand,
+}: {
+  photo: Photo;
+  dated: boolean;
+  rephotoUrl: string | null;
+  view: PhotoView;
+  onView: (v: PhotoView) => void;
+  expanded: boolean;
+  stackCompare: boolean;
+  onExpand: () => void;
+}) {
+  const compare = view === "both";
+  const showNow = (view === "now" || compare) && !!rephotoUrl;
+  const showThen = view === "then" || compare;
+
+  const frame: React.CSSProperties = {
+    position: "relative", borderRadius: 8, overflow: "hidden",
+    border: "1px solid #D6CDBD", minHeight: 0, minWidth: 0, flex: 1,
+    // Expanded, panes take the landscape shape of the photographs themselves and are centred in
+    // whatever room is left. Stretching them to the full height of a tall dialog just grows the
+    // black letterbox bars above and below the print — more pane, no more picture. (In the drawer
+    // the block is a fixed height, so there they stretch.)
+    ...(expanded ? { aspectRatio: "4 / 3", maxHeight: "100%", width: "100%", flex: "0 1 auto" } : null),
+  };
+  const thenBg = photo.thumb ? "#1A1814" : "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)";
+
+  const thenPane = (
+    <div
+      style={{ ...frame, background: thenBg, cursor: expanded ? "default" : "zoom-in" }}
+      onClick={expanded ? undefined : onExpand}
+    >
+      {photo.thumb && (
+        <img src={photo.thumb} alt={photo.title} style={{
+          position: "absolute", inset: 0, width: "100%", height: "100%",
+          objectFit: "contain", display: "block",
+        }} />
+      )}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: "linear-gradient(180deg, rgba(26,24,20,0) 55%, rgba(26,24,20,0.45) 100%)",
+      }} />
+      {/* Solo only — in the comparison each pane is captioned above the frame instead. */}
+      {!compare && <PaneLabel>{dated ? `Then · ${photo.year}` : "Then"}</PaneLabel>}
+    </div>
+  );
+
+  const nowPane = rephotoUrl ? (
+    <div style={{ ...frame, background: "repeating-linear-gradient(135deg, #C8C3B6 0 8px, #B0AC9F 8px 16px)" }}>
+      <iframe
+        key={`${photo.id}-${compare ? "cmp" : "solo"}`}
+        src={rephotoUrl}
+        title={`Street View looking at ${photo.address || photo.title} today`}
+        loading="lazy"
+        allowFullScreen
+        referrerPolicy="strict-origin-when-cross-origin"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+      />
+    </div>
+  ) : null;
+
+  // In the comparison the captions sit ABOVE the frames, not on them: Google's embed parks its own
+  // address card in the top-left corner, and an overlay chip lands right on top of it.
+  const captioned = (caption: string, pane: React.ReactNode) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, minHeight: 0, minWidth: 0, height: "100%", justifyContent: "center" }}>
+      <div style={{
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10,
+        letterSpacing: 1, textTransform: "uppercase", color: "#6B6359", flexShrink: 0,
+      }}>{caption}</div>
+      {pane}
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, minHeight: 0 }}>
+      <div style={{
+        flex: 1, minHeight: 0, display: "grid", gap: 10,
+        gridTemplateColumns: compare && !stackCompare ? "1fr 1fr" : "1fr",
+        gridTemplateRows: compare && stackCompare ? "1fr 1fr" : "1fr",
+        alignItems: expanded ? "center" : "stretch",
+      }}>
+        {showThen && (compare ? captioned(dated ? `Then · ${photo.year}` : "Then", thenPane) : thenPane)}
+        {showNow && (compare ? captioned("Now · Street View", nowPane) : nowPane)}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 18px", borderBottom: "1px solid #EEE6D6",
+          display: "flex", background: "#FFFFFF", border: "1px solid #D6CDBD",
+          borderRadius: 999, overflow: "hidden", boxShadow: "0 2px 8px rgba(26,24,20,0.10)",
+        }}>
+          {(rephotoUrl ? (["then", "now", "both"] as const) : (["then"] as const)).map((m) => (
+            <button key={m} onClick={() => onView(m)} style={{
+              padding: "6px 14px",
+              background: view === m ? "#1A1814" : "transparent",
+              color: view === m ? "#F6F2EB" : "#1A1814",
+              border: "none", fontSize: 12, fontWeight: 500, cursor: "pointer",
+              fontFamily: "'Work Sans', sans-serif",
+            }}>{m === "both" ? "Side by side" : m === "then" ? "Then" : "Now"}</button>
+          ))}
+        </div>
+
+        {/* The old "scroll to zoom" was a promise nothing kept. Expand is the real one. */}
+        {!expanded && (
+          <button onClick={onExpand} style={{
+            background: "none", border: "none", cursor: "pointer", padding: 0,
+            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: "#6B6359",
+          }}>{rephotoUrl ? "Expand to compare" : "Click the photo to expand"}</button>
+        )}
+
+        {/* Whose image is this? The archival print is CPL's; the "now" is Google's, and the
+            viewpoint is a librarian's judgement about where the photographer stood. Say so —
+            the same contract the AI-extracted label keeps elsewhere in this panel. */}
+        {showNow && (
+          <div style={{
+            flex: "1 1 260px", minWidth: 200,
+            fontSize: 11, lineHeight: 1.45, color: "#6B6359",
+            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+          }}>
+            Imagery &copy; Google Street View · viewpoint matched by CPL staff
+            {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}°` : ""}
+            <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 2 }}>
+              Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PaneLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      position: "absolute", top: 10, left: 12,
+      fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+      fontSize: 10, color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
+      padding: "4px 8px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase",
+      pointerEvents: "none",
+    }}>{children}</div>
+  );
+}
+
+function ExpandGlyph({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+      {collapsed ? (
+        <>
+          <path d="M5 1v4H1" stroke="#3D3833" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 11V7h4" stroke="#3D3833" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      ) : (
+        <>
+          <path d="M1 5V1h4" stroke="#3D3833" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M11 7v4H7" stroke="#3D3833" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+// ── Everything under the image: the corner sequence, the facts, the asks ────
+
+function PhotoFacts({
+  photo, corner, hasSequence, neighbors, dated, onOpenPhoto,
+}: {
+  photo: Photo;
+  corner: Photo[];
+  hasSequence: boolean;
+  neighbors: Photo[];
+  dated: boolean;
+  onOpenPhoto: (p: Photo) => void;
+}) {
+  return (
+    <>
+      {hasSequence && (
+        <div style={{ margin: "14px 18px 0" }}>
+          <div style={{
+            fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10,
+            letterSpacing: 1, textTransform: "uppercase", color: "#6B6359", marginBottom: 8,
+          }}>
+            This corner · {corner.length} photographs{yearSpan(corner) ? ` · ${yearSpan(corner)}` : ""}
+          </div>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+            {corner.map((c) => {
+              const isCurrent = c.id === photo.id;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => !isCurrent && onOpenPhoto(c)}
+                  title={c.year > 0 ? String(c.year) : "date unknown"}
+                  style={{
+                    flex: "0 0 auto", width: 78, padding: 0, cursor: isCurrent ? "default" : "pointer",
+                    background: "transparent", textAlign: "left",
+                    border: isCurrent ? "2px solid #1A1814" : "1px solid #D6CDBD",
+                    borderRadius: 5, overflow: "hidden", opacity: isCurrent ? 1 : 0.82,
+                  }}
+                >
+                  <div style={{ position: "relative", height: 52, background: "#1A1814" }}>
+                    {c.thumb && (
+                      <img src={c.thumb} alt="" style={{
+                        position: "absolute", inset: 0, width: "100%", height: "100%",
+                        objectFit: "cover", display: "block",
+                      }} />
+                    )}
+                    {/* a sibling that already has a modern viewpoint framed */}
+                    {c.rephotoEmbedUrl && (
+                      <span title="then & now available" style={{
+                        position: "absolute", top: 3, right: 3, width: 6, height: 6,
+                        borderRadius: "50%", background: "#E9E186", boxShadow: "0 0 0 1.5px rgba(26,24,20,0.5)",
+                      }} />
+                    )}
+                  </div>
+                  <div style={{
+                    fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 9.5,
+                    padding: "3px 5px", color: isCurrent ? "#1A1814" : "#6B6359",
+                    background: isCurrent ? "#F1ECE2" : "#fff",
+                  }}>{c.year > 0 ? c.year : "—"}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div style={{ padding: "14px 18px 0" }}>
+        <div style={{
+          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
+          fontWeight: 500, fontSize: 24, lineHeight: 1.15, letterSpacing: -0.2,
+          color: "#1A1814", marginBottom: 10,
+        }}>{photo.title}</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+          <Pill tone={photo.rights.startsWith("Public") ? "good" : "warn"}>{photo.rights}</Pill>
+          {photo.featured && photo.story && <Pill tone="featured">Featured in {photo.story}</Pill>}
+        </div>
+      </div>
+
+      <div style={{
+        padding: "0 18px", display: "grid", gridTemplateColumns: "110px 1fr",
+        rowGap: 8, columnGap: 12, fontSize: 13, color: "#3D3833",
+      }}>
+        <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || (dated ? `c. ${photo.year}` : "no legible date stamp")}</MetaValue>
+        <MetaLabel>Photographer</MetaLabel><MetaValue>{photo.photographer}</MetaValue>
+        <MetaLabel>Address</MetaLabel><MetaValue>{photo.address}</MetaValue>
+        <MetaLabel>Neighborhood</MetaLabel><MetaValue>{photo.neighborhood}</MetaValue>
+        <MetaLabel>Held at</MetaLabel><MetaValue>{photo.branch}</MetaValue>
+      </div>
+
+      {photo.facets && <FacetsBlock photo={photo} />}
+
+      {photo.note && (
+        <div style={{
+          margin: "18px 18px 0", padding: "14px 16px",
+          background: "#FAF6EE", border: "1px solid #EEE6D6",
+          borderLeft: "3px solid #1F5963", borderRadius: 6,
         }}>
           <div style={{
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-            fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#6B6359",
-          }}>{dated ? `Photo · ${photo.year}` : "Photo · date unknown"}</div>
-          <button onClick={onClose} style={{
-            background: "none", border: "none", cursor: "pointer",
-            fontSize: 20, lineHeight: 1, color: "#6B6359",
-          }}>×</button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto" }}>
+            fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase",
+            color: "#1F5963", marginBottom: 6,
+          }}>Librarian&apos;s Note · Brian K.</div>
           <div style={{
-            position: "relative", margin: 18, borderRadius: 8, overflow: "hidden", height: 280,
-            background: view === "then"
-              ? (photo.thumb ? "#1A1814" : "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)")
-              : "repeating-linear-gradient(135deg, #C8C3B6 0 8px, #B0AC9F 8px 16px)",
-            border: "1px solid #D6CDBD",
-          }}>
-            {view === "then" && photo.thumb && (
-              <img src={photo.thumb} alt={photo.title} style={{
-                position: "absolute", inset: 0, width: "100%", height: "100%",
-                objectFit: "contain", display: "block",
-              }} />
-            )}
-            {view === "now" && rephotoUrl && (
-              <iframe
-                key={photo.id}
-                src={rephotoUrl}
-                title={`Street View looking at ${photo.address || photo.title} today`}
-                loading="lazy"
-                allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
-                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
-              />
-            )}
-            {view === "then" && <div style={{
-              position: "absolute", inset: 0,
-              background: "linear-gradient(180deg, rgba(26,24,20,0) 50%, rgba(26,24,20,0.45) 100%)",
-              pointerEvents: "none",
-            }} />}
-            {/* Only over the archival image: Google's embed puts its own address card top-left,
-                and the Then/Now toggle plus the attribution line below already say which is which. */}
-            {view === "then" && <div style={{
-              position: "absolute", top: 10, left: 12,
-              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-              fontSize: 10, color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
-              padding: "4px 8px", borderRadius: 3, letterSpacing: 1, textTransform: "uppercase",
-            }}>{dated ? `Then · ${photo.year}` : "Then"}</div>}
+            fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
+            fontSize: 15, lineHeight: 1.45, color: "#1A1814",
+          }}>{photo.note}</div>
+        </div>
+      )}
 
-            <div style={{
-              position: "absolute", bottom: 12, left: 12, display: "flex",
-              background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 999,
-              overflow: "hidden", boxShadow: "0 2px 8px rgba(26,24,20,0.15)",
-            }}>
-              {(rephotoUrl ? (["then", "now"] as const) : (["then"] as const)).map((m) => (
-                <button key={m} onClick={() => setView(m)} style={{
-                  padding: "6px 14px",
-                  background: view === m ? "#1A1814" : "transparent",
-                  color: view === m ? "#F6F2EB" : "#1A1814",
-                  border: "none", fontSize: 12, fontWeight: 500,
-                  textTransform: "capitalize", cursor: "pointer",
-                  fontFamily: "'Work Sans', sans-serif",
-                }}>{m}</button>
-              ))}
-            </div>
-
-            <div style={{
-              position: "absolute", bottom: 12, right: 12,
-              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-              fontSize: 10, color: "#fff", opacity: 0.85,
-            }}>{view === "then" ? "scroll to zoom" : ""}</div>
-          </div>
-
-          {/* Whose image is this? The archival print is CPL's; the "now" is Google's, and the
-              viewpoint is a librarian's judgement about where the photographer stood. Say so —
-              the same contract the AI-extracted label keeps elsewhere in this panel. */}
-          {view === "now" && rephotoUrl && (
-            <div style={{
-              margin: "-6px 18px 0", fontSize: 11, lineHeight: 1.5, color: "#6B6359",
-              fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-            }}>
-              Imagery &copy; Google Street View · viewpoint matched to the photograph by CPL staff
-              {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}\u00B0` : ""}
-              <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 3 }}>
-                Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
-              </div>
-            </div>
-          )}
-
-          {hasSequence && (
-            <div style={{ margin: "14px 18px 0" }}>
-              <div style={{
-                fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 10,
-                letterSpacing: 1, textTransform: "uppercase", color: "#6B6359", marginBottom: 8,
+      {neighbors.length > 0 && (
+        <div style={{ marginTop: 24, padding: "0 18px" }}>
+          <div style={{
+            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+            fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase",
+            color: "#6B6359", marginBottom: 10,
+          }}>Neighbors in time</div>
+          <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
+            {neighbors.map((n) => (
+              <button key={n.id} onClick={() => onOpenPhoto(n)} style={{
+                flexShrink: 0, width: 132, background: "none",
+                border: "1px solid #EEE6D6", borderRadius: 8, padding: 0,
+                textAlign: "left", cursor: "pointer", overflow: "hidden",
+                fontFamily: "'Work Sans', sans-serif",
               }}>
-                This corner · {corner.length} photographs{yearSpan(corner) ? ` · ${yearSpan(corner)}` : ""}
-              </div>
-              <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-                {corner.map((c) => {
-                  const isCurrent = c.id === photo.id;
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => !isCurrent && onOpenPhoto(c)}
-                      title={c.year > 0 ? String(c.year) : "date unknown"}
-                      style={{
-                        flex: "0 0 auto", width: 78, padding: 0, cursor: isCurrent ? "default" : "pointer",
-                        background: "transparent", textAlign: "left",
-                        border: isCurrent ? "2px solid #1A1814" : "1px solid #D6CDBD",
-                        borderRadius: 5, overflow: "hidden", opacity: isCurrent ? 1 : 0.82,
-                      }}
-                    >
-                      <div style={{ position: "relative", height: 52, background: "#1A1814" }}>
-                        {c.thumb && (
-                          <img src={c.thumb} alt="" style={{
-                            position: "absolute", inset: 0, width: "100%", height: "100%",
-                            objectFit: "cover", display: "block",
-                          }} />
-                        )}
-                        {/* a sibling that already has a modern viewpoint framed */}
-                        {c.rephotoEmbedUrl && (
-                          <span title="then & now available" style={{
-                            position: "absolute", top: 3, right: 3, width: 6, height: 6,
-                            borderRadius: "50%", background: "#E9E186", boxShadow: "0 0 0 1.5px rgba(26,24,20,0.5)",
-                          }} />
-                        )}
-                      </div>
-                      <div style={{
-                        fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 9.5,
-                        padding: "3px 5px", color: isCurrent ? "#1A1814" : "#6B6359",
-                        background: isCurrent ? "#F1ECE2" : "#fff",
-                      }}>{c.year > 0 ? c.year : "—"}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div style={{ padding: "0 18px 0" }}>
-            <div style={{
-              fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-              fontWeight: 500, fontSize: 24, lineHeight: 1.15, letterSpacing: -0.2,
-              color: "#1A1814", marginBottom: 10,
-            }}>{photo.title}</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-              <Pill tone={photo.rights.startsWith("Public") ? "good" : "warn"}>{photo.rights}</Pill>
-              {photo.featured && photo.story && <Pill tone="featured">Featured in {photo.story}</Pill>}
-            </div>
-          </div>
-
-          <div style={{
-            padding: "0 18px", display: "grid", gridTemplateColumns: "110px 1fr",
-            rowGap: 8, columnGap: 12, fontSize: 13, color: "#3D3833",
-          }}>
-            <MetaLabel>Date</MetaLabel><MetaValue>{photo.date_display || (dated ? `c. ${photo.year}` : "no legible date stamp")}</MetaValue>
-            <MetaLabel>Photographer</MetaLabel><MetaValue>{photo.photographer}</MetaValue>
-            <MetaLabel>Address</MetaLabel><MetaValue>{photo.address}</MetaValue>
-            <MetaLabel>Neighborhood</MetaLabel><MetaValue>{photo.neighborhood}</MetaValue>
-            <MetaLabel>Held at</MetaLabel><MetaValue>{photo.branch}</MetaValue>
-          </div>
-
-          {photo.facets && <FacetsBlock photo={photo} />}
-
-          {photo.note && (
-            <div style={{
-              margin: "18px 18px 0", padding: "14px 16px",
-              background: "#FAF6EE", border: "1px solid #EEE6D6",
-              borderLeft: "3px solid #1F5963", borderRadius: 6,
-            }}>
-              <div style={{
-                fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase",
-                color: "#1F5963", marginBottom: 6,
-              }}>Librarian&apos;s Note · Brian K.</div>
-              <div style={{
-                fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-                fontSize: 15, lineHeight: 1.45, color: "#1A1814",
-              }}>{photo.note}</div>
-            </div>
-          )}
-
-          {neighbors.length > 0 && (
-            <div style={{ marginTop: 24, padding: "0 18px" }}>
-              <div style={{
-                fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase",
-                color: "#6B6359", marginBottom: 10,
-              }}>Neighbors in time</div>
-              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 4 }}>
-                {neighbors.map((n) => (
-                  <button key={n.id} onClick={() => onOpenPhoto(n)} style={{
-                    flexShrink: 0, width: 132, background: "none",
-                    border: "1px solid #EEE6D6", borderRadius: 8, padding: 0,
-                    textAlign: "left", cursor: "pointer", overflow: "hidden",
-                    fontFamily: "'Work Sans', sans-serif",
-                  }}>
-                    <div style={{
-                      height: 76,
-                      background: n.thumb
-                        ? `center / cover no-repeat url(${n.thumb})`
-                        : "repeating-linear-gradient(135deg, #C8B68F 0 6px, #B8A37A 6px 12px)",
-                    }} />
-                    <div style={{ padding: 8 }}>
-                      <div style={{
-                        fontSize: 12, color: "#1A1814", fontWeight: 500, lineHeight: 1.2,
-                        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                      }}>{n.title}</div>
-                      <div style={{
-                        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-                        fontSize: 10, color: "#A39684", marginTop: 3,
-                      }}>{n.year} · {n.neighborhood.split("·")[0].trim()}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div style={{
-            margin: "22px 18px 0", padding: "14px 16px",
-            background: "#FFFFFF", border: "1px dashed #D6CDBD", borderRadius: 6,
-          }}>
-            <div style={{
-              fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-              fontSize: 16, color: "#1A1814", marginBottom: 4,
-            }}>Do you remember this corner?</div>
-            <div style={{ fontSize: 13, color: "#3D3833", lineHeight: 1.45, marginBottom: 10 }}>
-              Tell us what you know — a name, a date, a story. CPL staff review every note.
-            </div>
-            <button style={{
-              padding: "8px 14px", background: "#1A1814", color: "#F6F2EB",
-              border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer",
-              fontFamily: "'Work Sans', sans-serif",
-            }}>Add a memory →</button>
-          </div>
-
-          <div style={{ margin: "22px 18px 24px", display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <ActionLink>Cite</ActionLink>
-            <ActionLink>Share</ActionLink>
-            <ActionLink>Request a scan</ActionLink>
-            <ActionLink>Visit {photo.branch}</ActionLink>
+                <div style={{
+                  height: 76,
+                  background: n.thumb
+                    ? `center / cover no-repeat url(${n.thumb})`
+                    : "repeating-linear-gradient(135deg, #C8B68F 0 6px, #B8A37A 6px 12px)",
+                }} />
+                <div style={{ padding: 8 }}>
+                  <div style={{
+                    fontSize: 12, color: "#1A1814", fontWeight: 500, lineHeight: 1.2,
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>{n.title}</div>
+                  <div style={{
+                    fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+                    fontSize: 10, color: "#A39684", marginTop: 3,
+                  }}>{n.year} · {n.neighborhood.split("·")[0].trim()}</div>
+                </div>
+              </button>
+            ))}
           </div>
         </div>
+      )}
+
+      <div style={{
+        margin: "22px 18px 0", padding: "14px 16px",
+        background: "#FFFFFF", border: "1px dashed #D6CDBD", borderRadius: 6,
+      }}>
+        <div style={{
+          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
+          fontSize: 16, color: "#1A1814", marginBottom: 4,
+        }}>Do you remember this corner?</div>
+        <div style={{ fontSize: 13, color: "#3D3833", lineHeight: 1.45, marginBottom: 10 }}>
+          Tell us what you know — a name, a date, a story. CPL staff review every note.
+        </div>
+        <button style={{
+          padding: "8px 14px", background: "#1A1814", color: "#F6F2EB",
+          border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer",
+          fontFamily: "'Work Sans', sans-serif",
+        }}>Add a memory →</button>
+      </div>
+
+      <div style={{ margin: "22px 18px 24px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <ActionLink>Cite</ActionLink>
+        <ActionLink>Share</ActionLink>
+        <ActionLink>Request a scan</ActionLink>
+        <ActionLink>Visit {photo.branch}</ActionLink>
       </div>
     </>
   );

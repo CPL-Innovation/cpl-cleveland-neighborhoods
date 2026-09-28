@@ -227,6 +227,27 @@ export function adaptHarvestedRecord(rec: HarvestedRecord): Photo | null {
   };
 }
 
+/**
+ * Layer the live enrichment (from /api/patron/enrichment) onto the harvested ContentDM photos.
+ *
+ * The catalog is a static harvest and stays one; the enrichment store is the live half. Joining
+ * them here — on the ContentDM id, in the browser — is what lets a *cataloged* photograph carry a
+ * then-and-now, which was previously a box-scan-only privilege. Photos with nothing enriched pass
+ * through untouched.
+ */
+export function applyPatronEnrichment(
+  photos: Photo[],
+  enrichment: import("@/lib/types").PatronEnrichment[],
+): Photo[] {
+  if (!enrichment.length) return photos;
+  const byId = new Map(enrichment.map((e) => [String(e.contentdm_id), e]));
+  return photos.map((p) => {
+    const e = p.contentdm_id != null ? byId.get(String(p.contentdm_id)) : undefined;
+    if (!e) return p;
+    return { ...p, rephotoEmbedUrl: e.rephoto_embed_url, rephotoBearing: e.rephoto_bearing };
+  });
+}
+
 // Adapt a unified box-scan photo (from /api/patron/facets — the normalized 99) onto the map.
 // Requires real coordinates (set by the Finalize stage's geocode/pin) + a usable year; the rest
 // stay in the pool but off the map, exactly like ungeocoded ContentDM records. The honesty label
