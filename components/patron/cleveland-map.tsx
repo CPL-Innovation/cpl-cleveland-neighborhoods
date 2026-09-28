@@ -1,5 +1,5 @@
 "use client";
-// ClevelandMap — Leaflet + CARTO Positron basemap with CSS-styled div-icon photo dots.
+// ClevelandMap — Leaflet + a pale keyless basemap (see ./basemap.ts) with CSS-styled div-icon photo dots.
 // Ported from cleveland-map.jsx's Leaflet implementation. Loaded via next/dynamic({ssr:false})
 // so Leaflet (which needs window/DOM) never runs on the server. The photo pool now arrives
 // as a prop (was window.ALL_PHOTOS); the rest of the prop surface is unchanged.
@@ -8,6 +8,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./patron.css";
 import { MILLIONAIRES_ROW, unprojectXY, type Photo } from "./data";
+import { basemap } from "./basemap";
 import { groupIntoPlaces, yearSpan } from "@/lib/patron-places";
 
 interface ClevelandMapProps {
@@ -69,12 +70,29 @@ export default function ClevelandMap({
       preferCanvas: true, // smoother with many markers
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      subdomains: "abcd",
+    // See components/patron/basemap.ts — the provider is a seam because CARTO's keyless tiles
+    // now render "API KEY REQUIRED" while still returning HTTP 200.
+    const base = basemap();
+    L.tileLayer(base.url, {
+      attribution: base.attribution,
+      subdomains: base.subdomains ?? "abc",
       maxZoom: 19,
+      maxNativeZoom: base.maxNativeZoom, // past this the provider has no tiles — upscale, don't blank
     }).addTo(map);
+    if (base.labels) {
+      // Place names ride on their own layer for this provider; without it the city loses its
+      // neighbourhood names, which are half of how you find your street. Its own pane, sitting
+      // between the tiles (200) and the vectors (400), so the featured corridor and the photo dots
+      // stay on top — and pointer-events off, so a label tile can never swallow a click on a dot.
+      const pane = map.createPane("basemapLabels");
+      pane.style.zIndex = "350";
+      pane.style.pointerEvents = "none";
+      L.tileLayer(base.labels.url, {
+        maxZoom: 19,
+        maxNativeZoom: base.labels.maxNativeZoom,
+        pane: "basemapLabels",
+      }).addTo(map);
+    }
 
     // Featured Millionaire's Row corridor — soft glow + crisp dashed line.
     const corridor = MILLIONAIRES_ROW.map((p) => {
