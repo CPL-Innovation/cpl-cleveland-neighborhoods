@@ -110,3 +110,44 @@ export function describeBearing(deg: number): string {
   const points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
   return `${Math.round(d)}° (${points[Math.round(d / 22.5) % 16]})`;
 }
+
+// ── The unframed "now": a default Street View built from the address ────────────────
+//
+// Everything above describes a viewpoint a librarian FRAMED — walked to, matched against the
+// print, and pasted in. That is the good version, and it stays the good version. But it exists
+// for a few dozen photographs out of thousands, and the rest were showing no "now" at all even
+// when we knew exactly where they were.
+//
+// So: where a photo has real coordinates and nobody has framed it, we synthesize a Street View
+// at that point. It is NOT a then-and-now. Three things we cannot do without a Google API key:
+//
+//   1. Check that Street View covers the spot at all. The metadata endpoint is keyed; keyless,
+//      a coordinate with no imagery renders grey. (Compare the CARTO basemap: HTTP 200, valid
+//      PNG, "API KEY REQUIRED" painted across it. Providers fail by rendering.)
+//   2. Aim it. The geocode is the SUBJECT — the building. The panorama is somewhere out on the
+//      street, and we can't read where, so we can't compute the heading back toward the house.
+//      We therefore set none and let Google use the panorama's own default (usually down the
+//      street), rather than assert a bearing we'd be guessing.
+//   3. Promise the house is even in shot. Nominatim often interpolates along the street.
+//
+// Which is why the panel labels this one differently and invites the reader to pan: the honest
+// claim is "this is the street today, near this address", not "this is the same view".
+//
+// The URL is the old keyless `output=svembed` form — no API key, no billing, same as the `pb=`
+// embeds staff paste. It is derived, never stored: there is no column for it and no write path.
+// A synthesized URL in the database would be a second, stale home for a fact that is already
+// fully determined by lat/lng.
+
+export function autoStreetViewUrl(lat: number | null | undefined, lng: number | null | undefined): string | null {
+  if (lat == null || lng == null) return null;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  // Literal comma, not %2C — the encoded form is accepted and then rendered blank.
+  const at = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+  // ⚠ `cbp` is NOT optional, whatever it looks like. Drop it and the same URL still returns a
+  // perfectly good embed — of a zoomed-out world map. No error, no console warning, no failed
+  // request: `layer=c` alone silently degrades to map mode. (Third time this project has met a
+  // vendor that fails by rendering; see the CARTO basemap note in CLAUDE.md.) The fields are
+  // zoom,heading,tilt,?,pitch — heading 0 is due north, which is all we can honestly claim.
+  return `https://maps.google.com/maps?q=&layer=c&cbll=${at}&cbp=11,0,0,0,0&source=embed&output=svembed&hl=en`;
+}

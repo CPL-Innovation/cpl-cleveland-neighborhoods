@@ -221,6 +221,12 @@ export function adaptHarvestedRecord(rec: HarvestedRecord): Photo | null {
     branch: "Main Library",
     note: null,
     thumb: rec.thumb || undefined,
+    // Carry the harvested coordinates through, don't just project them away. x/y is the legacy
+    // viewBox space; `photoLatLng` can unproject back out of it, but that roundtrip is a lossy
+    // stand-in for a number we were handed. Anything that needs the real point — place grouping,
+    // the address-derived Street View — should read the cataloged coordinate, not an inverse.
+    lat: rec.lat,
+    lng: rec.lng,
     contentdm_url: rec.contentdm_url || undefined,
     sort_date: rec.sort_date || undefined,
     date_display: rec.date_display || undefined,
