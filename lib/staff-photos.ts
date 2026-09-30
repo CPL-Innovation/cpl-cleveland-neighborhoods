@@ -58,3 +58,51 @@ export async function listBoxScanStaffPhotos(): Promise<BoxScanStaffPhoto[]> {
     }))
     .sort((a, b) => a.chc_id.localeCompare(b.chc_id));
 }
+
+/**
+ * The live geo overlay for the ContentDM half of the list.
+ *
+ * The staff Photos list builds its ContentDM rows from the static harvest, which is right — the
+ * catalog is a snapshot and stays one. But a coordinate a librarian looks up on Record Edit is
+ * enrichment, written to photo_enrichment, and the harvest will never know about it. Without
+ * this read the librarian does the work and the GEO column still says "missing", which reads as
+ * "the button didn't do anything" — the failure the whole feature exists to avoid.
+ *
+ * Same shape as the patron side's `/api/patron/enrichment`: a thin overlay joined onto the
+ * static catalog by ContentDM id, carrying only what enrichment owns. Nothing cataloged is
+ * duplicated here.
+ */
+export interface ContentdmGeoOverlay {
+  contentdm_id: string;
+  lat: number;
+  lng: number;
+  geo_source: string | null;
+  geo_confidence: string | null;
+}
+
+export async function listContentdmGeoOverlay(): Promise<ContentdmGeoOverlay[]> {
+  const { getDb } = await import("@/lib/db");
+  const { photoEnrichment } = await import("@/drizzle/schema");
+  const { and, eq, isNotNull } = await import("drizzle-orm");
+  const rows = await getDb()
+    .select({
+      id: photoEnrichment.id,
+      contentdmId: photoEnrichment.contentdmId,
+      lat: photoEnrichment.lat,
+      lng: photoEnrichment.lng,
+      geoSource: photoEnrichment.geoSource,
+      geoConfidence: photoEnrichment.geoConfidence,
+    })
+    .from(photoEnrichment)
+    .where(and(eq(photoEnrichment.source, "contentdm"), isNotNull(photoEnrichment.lat)));
+
+  return rows
+    .filter((r) => r.lat != null && r.lng != null)
+    .map((r) => ({
+      contentdm_id: String(r.contentdmId ?? r.id),
+      lat: Number(r.lat),
+      lng: Number(r.lng),
+      geo_source: r.geoSource,
+      geo_confidence: r.geoConfidence,
+    }));
+}

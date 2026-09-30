@@ -167,3 +167,31 @@ export function adaptHarvestedToStaff(r: HarvestedRecord, i: number): StaffRecor
     rightsUri: (r.rights_uri as string) || null,
   };
 }
+
+/**
+ * Layer the live coordinate overlay onto the harvested ContentDM rows.
+ *
+ * The mirror of the patron side's `applyPatronEnrichment`: the catalog stays a static harvest,
+ * the enrichment store is the live half, and the join happens here in the browser on ContentDM
+ * id. A row with no enrichment passes through untouched.
+ */
+export function applyStaffGeoOverlay(
+  records: StaffRecord[],
+  overlay: import("@/lib/staff-photos").ContentdmGeoOverlay[],
+): StaffRecord[] {
+  if (!overlay.length) return records;
+  const byId = new Map(overlay.map((o) => [o.contentdm_id, o]));
+  return records.map((r) => {
+    if (r.source !== "contentdm") return r;
+    const o = byId.get(r.id);
+    if (!o) return r;
+    return {
+      ...r,
+      lat: o.lat,
+      lng: o.lng,
+      geo: o.geo_confidence === "exact" ? "exact" : "block",
+      conf: o.geo_confidence === "exact" ? "1" : "2",
+      doneGeo: true,
+    };
+  });
+}

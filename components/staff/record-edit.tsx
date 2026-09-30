@@ -16,6 +16,7 @@ import {
   ChipInput,
 } from "@/components/staff/ui";
 import { RephotoTray } from "@/components/staff/rephoto-tray";
+import { GeoTray } from "@/components/staff/geo-tray";
 import { staffApi } from "@/lib/staff-api";
 import type { RephotoRow } from "@/lib/rephoto-store";
 
@@ -347,54 +348,17 @@ function RecordFieldsPane({ cur }: { cur: StaffRecord }) {
         </Field>
       </FieldGroup>
 
+      {/* Location & geo — the real thing now. What stood here was scaffolding: a CSS-gradient
+          map with hardcoded pins, a fixed "41.5008° N" readout, and an uncontrolled address
+          input that saved nowhere. Keeping a drawn coordinate beside a looked-up one is exactly
+          the confusion this screen exists to avoid, so the whole group is the tray. */}
       <FieldGroup label="Location & geo">
-        <Field label="Pin" provenance={{ who: 'you', when: '2 min ago' }} dirty>
-          <div style={{
-            height: 140,
-            background: '#E8DFCE',
-            borderRadius: 6,
-            position: 'relative',
-            overflow: 'hidden',
-            border: `1px solid ${t.borderSoft}`,
-          } as React.CSSProperties}>
-            <div style={{
-              position: 'absolute', inset: 0,
-              background: `
-                linear-gradient(90deg, transparent 49.7%, rgba(26,24,20,0.08) 49.7%, rgba(26,24,20,0.08) 50.3%, transparent 50.3%),
-                linear-gradient(0deg, transparent 49.7%, rgba(26,24,20,0.08) 49.7%, rgba(26,24,20,0.08) 50.3%, transparent 50.3%),
-                radial-gradient(circle at 50% 50%, #DDD0B3 0%, #C8B68F 100%)
-              `,
-            } as React.CSSProperties}/>
-            {/* Existing pins faintly */}
-            <SmallPin x="38%" y="44%" muted/>
-            <SmallPin x="56%" y="51%" muted/>
-            <SmallPin x="44%" y="62%" muted/>
-            {/* Current pin */}
-            <SmallPin x="49%" y="48%" active/>
-            <div style={{
-              position: 'absolute', bottom: 6, right: 8,
-              fontFamily: t.mono, fontSize: 10,
-              color: t.inkMuted, background: 'rgba(255,255,255,0.85)',
-              padding: '2px 6px', borderRadius: 3,
-            } as React.CSSProperties}>3 adjacent</div>
-            <div style={{
-              position: 'absolute', top: 6, left: 8,
-              fontFamily: t.mono, fontSize: 10,
-              color: t.ink, background: 'rgba(255,255,255,0.85)',
-              padding: '2px 6px', borderRadius: 3,
-              letterSpacing: 0.3,
-            } as React.CSSProperties}>41.5008° N · 81.6905° W</div>
-          </div>
-        </Field>
-
-        <Field label="Address / locator">
-          <input defaultValue={addressGuess} style={inputStyle(t)}/>
-        </Field>
-
-        <Field label="Geo confidence" provenance={{ who: cur?.doneGeo ? 'ContentDM' : '—', when: cur?.doneGeo ? 'on import' : 'no pin' }}>
-          <ConfidenceSegmented value={cur?.doneGeo ? 'exact' : 'unknown'}/>
-          <FieldFoot t={t}>Derived from pin precision · override allowed</FieldFoot>
-        </Field>
+        <GeoTray
+          id={cur.id}
+          source={cur.source ?? "contentdm"}
+          contentdmUrl={cur.contentdmUrl}
+          locatorHint={addressGuess}
+        />
       </FieldGroup>
 
       <FieldGroup label="Taxonomy">
@@ -627,7 +591,10 @@ function RecordContextPane({ cur }: { cur: StaffRecord }) {
         </div>
         <AiSugg label="Alt text" status="accepted" body="Black-and-white photograph of Euclid Avenue looking east…"/>
         <AiSugg label="Themes" status="open" body="Add ‘public-square-radius’? Used on 23 photos within 0.4 mi."/>
-        <AiSugg label="Geo" status="dismissed" body="‘Statler Hotel, 700 Euclid Ave’ → suggests 41.5006°, 81.6907°"/>
+        {/* The "Geo" card that sat here was a mockup of a suggestion — hardcoded, permanently
+            dismissed, with an Accept that only fired a toast. The real one lives in the
+            Location & geo panel and calls the geocoder, so the ghost is gone rather than
+            sitting beside the working control implying a second, different one. */}
       </div>
     </div>
   );

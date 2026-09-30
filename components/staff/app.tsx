@@ -4,10 +4,11 @@
 import React from "react";
 import { STAFF_TOKENS } from "@/lib/tokens";
 import {
-  NavContext, SAMPLE_RECORDS, adaptHarvestedToStaff, adaptBoxScanToStaff,
+  NavContext, SAMPLE_RECORDS, adaptHarvestedToStaff, adaptBoxScanToStaff, applyStaffGeoOverlay,
   useNav, type NavCtx, type StaffRecord, type ToastTone, type NavigateOpts,
   type BoxScanStaffPhoto,
 } from "@/components/staff/nav";
+import type { ContentdmGeoOverlay } from "@/lib/staff-photos";
 import { StaffShell } from "@/components/staff/shell";
 import { StaffHome } from "@/components/staff/home";
 import { StaffPhotosList } from "@/components/staff/photos-list";
@@ -74,17 +75,23 @@ export function StaffApp() {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("records.json missing"))))
       .then((raw: Parameters<typeof adaptHarvestedToStaff>[0][]) => raw.map(adaptHarvestedToStaff))
       .catch((err) => { console.warn("[harvest] using SAMPLE_RECORDS fallback:", err.message); return SAMPLE_RECORDS; });
-    const boxScans = fetch("/api/staff/photos")
-      .then((r) => (r.ok ? r.json() : { photos: [] }))
-      .then((d: { photos: BoxScanStaffPhoto[] }) => (d.photos || []).map(adaptBoxScanToStaff))
-      .catch(() => [] as StaffRecord[]);
+    const live = fetch("/api/staff/photos")
+      .then((r) => (r.ok ? r.json() : { photos: [], geo: [] }))
+      .then((d: { photos: BoxScanStaffPhoto[]; geo?: ContentdmGeoOverlay[] }) => ({
+        box: (d.photos || []).map(adaptBoxScanToStaff),
+        geo: d.geo || [],
+      }))
+      .catch(() => ({ box: [] as StaffRecord[], geo: [] as ContentdmGeoOverlay[] }));
 
-    Promise.all([harvest, boxScans]).then(([harvested, box]) => {
+    Promise.all([harvest, live]).then(([harvested, { box, geo }]) => {
       if (cancelled) return;
-      const merged = [...box, ...harvested]; // box-scans first — they're the active pilot worklist
+      // The harvest is the catalog snapshot; the overlay is what enrichment has since decided
+      // about it. Applying it here is what makes a coordinate a librarian just looked up show
+      // up in the GEO column, instead of the list reporting the snapshot forever.
+      const merged = [...box, ...applyStaffGeoOverlay(harvested, geo)]; // box-scans first — the active pilot worklist
       setRecords(merged);
       if (merged.length) setRecordId(merged[0].id);
-      console.log(`[photos] ${box.length} box-scan + ${harvested.length} ContentDM = ${merged.length} unified`);
+      console.log(`[photos] ${box.length} box-scan + ${harvested.length} ContentDM (${geo.length} geo-enriched) = ${merged.length} unified`);
     });
     return () => { cancelled = true; };
   }, []);
