@@ -5,6 +5,7 @@
 import React from "react";
 import { MILLIONAIRES_ROW, type Photo } from "./data";
 import { siblingsOf, yearSpan } from "@/lib/patron-places";
+import { autoStreetViewUrl } from "@/lib/rephoto";
 
 export function SearchIcon({ size = 14, color = "#3D3833" }: { size?: number; color?: string }) {
   return (
@@ -161,11 +162,23 @@ export function PhotoDetailPanel({
     Math.abs(p.year - photo.year) <= 8
   ).slice(0, 5);
 
-  // Then-and-now. The "now" is a Street View viewpoint a librarian framed by hand to match the
-  // photographer's position — so it only exists where someone has done that work. No recorded
-  // viewpoint means no toggle: offering "Now" and showing a placeholder would be a promise the
-  // panel can't keep.
-  const rephotoUrl = photo.rephotoEmbedUrl || null;
+  // Then-and-now, in two strengths. A FRAMED viewpoint is one a librarian walked to and matched
+  // against the print — the real thing, and the only one we call a then-and-now. Failing that, a
+  // photo with real coordinates gets an UNFRAMED default: Street View dropped at the address,
+  // aimed wherever Google aims it (lib/rephoto.ts explains why we can't aim it ourselves).
+  //
+  // The unframed one is worth showing — most of the collection would otherwise have no "now" at
+  // all despite our knowing exactly where it is — but only because it is labelled as what it is
+  // everywhere it appears, and the embed is pannable, so "look around" is a real instruction and
+  // not an excuse. `framedNow` is the flag the labels key off; nothing downstream may treat the
+  // two as interchangeable.
+  //
+  // Real coordinates only: `photoLatLng` would happily unproject the curated demo photos' legacy
+  // viewBox x/y into a plausible-looking Cleveland point, and dropping a patron on a street we
+  // merely inferred from a mock-up coordinate is exactly the false promise this is avoiding.
+  const framedNow = photo.rephotoEmbedUrl || null;
+  const autoNow = framedNow ? null : autoStreetViewUrl(photo.lat, photo.lng);
+  const rephotoUrl = framedNow ?? autoNow;
   // `year` is 0 for an undated box-scan (the adapters' sentinel — Photo.year is a number the
   // map filters on, so it can't be null). Never print the sentinel: an undated print must read
   // as undated, not as the year zero.
@@ -208,6 +221,7 @@ export function PhotoDetailPanel({
       photo={photo}
       dated={dated}
       rephotoUrl={rephotoUrl}
+      framedNow={!!framedNow}
       view={view}
       onView={(v) => {
         // Asking for the comparison in the drawer is asking for the room to do it.
@@ -364,11 +378,13 @@ function useViewportWidth(): number {
 // ── The image itself: then · now · side by side ─────────────────
 
 function PhotoMedia({
-  photo, dated, rephotoUrl, view, onView, expanded, stackCompare, onExpand,
+  photo, dated, rephotoUrl, framedNow, view, onView, expanded, stackCompare, onExpand,
 }: {
   photo: Photo;
   dated: boolean;
   rephotoUrl: string | null;
+  /** True only when a librarian framed this viewpoint; false for the address-derived default. */
+  framedNow: boolean;
   view: PhotoView;
   onView: (v: PhotoView) => void;
   expanded: boolean;
@@ -412,10 +428,26 @@ function PhotoMedia({
 
   const nowPane = rephotoUrl ? (
     <div style={{ ...frame, background: "repeating-linear-gradient(135deg, #C8C3B6 0 8px, #B0AC9F 8px 16px)" }}>
+      {/* Behind the iframe, and only ever seen through it. The keyless Street View endpoint
+          throttles — load a handful of embeds in a couple of minutes and it starts returning a
+          blank document, then recovers on its own. Nothing is catchable: the iframe is
+          cross-origin, so there is no error, no onError, no failed request. A loaded panorama is
+          opaque and hides this; a throttled one leaves the reader looking at a grey rectangle
+          with no idea whether the street is gone or the page is broken. Say which. */}
+      <div style={{
+        position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 24, textAlign: "center", pointerEvents: "none",
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 11, lineHeight: 1.6, color: "#4A453D",
+      }}>
+        Street View isn&rsquo;t loading just now — it limits how often it can be asked.
+        <br />The photograph is unaffected; try &ldquo;Now&rdquo; again in a minute.
+      </div>
       <iframe
         key={`${photo.id}-${compare ? "cmp" : "solo"}`}
         src={rephotoUrl}
-        title={`Street View looking at ${photo.address || photo.title} today`}
+        title={framedNow
+          ? `Street View looking at ${photo.address || photo.title} today`
+          : `Street View near ${photo.address || photo.title} today`}
         loading="lazy"
         allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
@@ -445,7 +477,9 @@ function PhotoMedia({
         alignItems: expanded ? "center" : "stretch",
       }}>
         {showThen && (compare ? captioned(dated ? `Then · ${photo.year}` : "Then", thenPane) : thenPane)}
-        {showNow && (compare ? captioned("Now · Street View", nowPane) : nowPane)}
+        {showNow && (compare
+          ? captioned(framedNow ? "Now · Street View" : "Now · Street View, near this address", nowPane)
+          : nowPane)}
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -454,7 +488,11 @@ function PhotoMedia({
           borderRadius: 999, overflow: "hidden", boxShadow: "0 2px 8px rgba(26,24,20,0.10)",
         }}>
           {(rephotoUrl ? (["then", "now", "both"] as const) : (["then"] as const)).map((m) => (
-            <button key={m} onClick={() => onView(m)} style={{
+            <button key={m} onClick={() => onView(m)} title={
+              m === "then" ? undefined
+                : framedNow ? "Street View, framed by CPL staff to match the photograph"
+                : "Street View near this address — not matched to the photograph"
+            } style={{
               padding: "6px 14px",
               background: view === m ? "#1A1814" : "transparent",
               color: view === m ? "#F6F2EB" : "#1A1814",
@@ -470,7 +508,7 @@ function PhotoMedia({
             background: "none", border: "none", cursor: "pointer", padding: 0,
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             fontSize: 10, letterSpacing: 0.6, textTransform: "uppercase", color: "#6B6359",
-          }}>{rephotoUrl ? "Expand to compare" : "Click the photo to expand"}</button>
+          }}>{rephotoUrl ? (framedNow ? "Expand to compare" : "Expand to see the street today") : "Click the photo to expand"}</button>
         )}
 
         {/* Whose image is this? The archival print is CPL's; the "now" is Google's, and the
@@ -482,10 +520,17 @@ function PhotoMedia({
             fontSize: 11, lineHeight: 1.45, color: "#6B6359",
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
           }}>
-            Imagery &copy; Google Street View · viewpoint matched by CPL staff
-            {photo.rephotoBearing != null ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}°` : ""}
+            Imagery &copy; Google Street View
+            {framedNow
+              ? " · viewpoint matched by CPL staff"
+              : " · viewpoint not matched — placed automatically from the address"}
+            {framedNow && photo.rephotoBearing != null
+              ? ` · facing ${Math.round(((photo.rephotoBearing % 360) + 360) % 360)}°`
+              : ""}
             <div style={{ fontFamily: "'Work Sans', sans-serif", fontStyle: "italic", marginTop: 2 }}>
-              Street View is photographed periodically — &ldquo;now&rdquo; is the most recent pass down this street, not today.
+              {framedNow
+                ? "Street View is photographed periodically — “now” is the most recent pass down this street, not today."
+                : "Nobody has matched this to the photographer’s viewpoint yet — Google dropped the camera near the address, facing whichever way it happened to face. Drag to look around. Street View is photographed periodically, so “now” is the most recent pass down this street, not today."}
             </div>
           </div>
         )}
