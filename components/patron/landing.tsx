@@ -424,6 +424,9 @@ function ResetIcon() { return <svg width="14" height="14" viewBox="0 0 14 14"><p
 
 // ── Story of the Week card ──────────────────────────────────────
 
+// The cover is the trail's Rockefeller stop — the one image whose subject and corner match exactly.
+const STORY_COVER = MILLIONAIRES_ROW.find((p) => p.id === "mr-5")?.thumb;
+
 function StoryOfTheWeek({ onOpen }: { onOpen: () => void }) {
   return (
     <div onClick={onOpen} style={{
@@ -436,7 +439,10 @@ function StoryOfTheWeek({ onOpen }: { onOpen: () => void }) {
       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 2px 12px rgba(26,24,20,0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
     >
       <div style={{
-        height: 132, background: "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)", position: "relative",
+        height: 132, position: "relative",
+        background: STORY_COVER
+          ? `center 40% / cover no-repeat url(${STORY_COVER}), #1A1814`
+          : "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)",
       }}>
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(26,24,20,0) 40%, rgba(26,24,20,0.55) 100%)" }} />
         <div style={{
@@ -450,7 +456,7 @@ function StoryOfTheWeek({ onOpen }: { onOpen: () => void }) {
           position: "absolute", bottom: 8, right: 10,
           fontFamily: '"JetBrains Mono", ui-monospace, monospace',
           fontSize: 10, color: "#fff", opacity: 0.85,
-        }}>[ archival photo ]</div>
+        }}>{STORY_COVER ? "Rockefeller house · E. 40th" : "[ archival photo ]"}</div>
       </div>
       <div style={{ padding: "14px 16px 16px" }}>
         <div style={{
