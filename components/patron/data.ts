@@ -141,35 +141,55 @@ const CLEVELAND_PHOTOS: Photo[] = [
 ];
 
 // Millionaire's Row — featured story along Euclid. Shared fields applied below.
-const MILLIONAIRES_ROW_SEED: Array<Pick<Photo, "id" | "x" | "y" | "year" | "title" | "address" | "photographer" | "note">> = [
+//
+// The stops are a curated demo, but their images are real: each `thumb` is a CPL ContentDM
+// item (IIIF) chosen as the closest stand-in in the library's own holdings — an exact match
+// where one exists (Brush, Rockefeller, Mather, Bingham, Hay), otherwise a period view of the
+// same stretch of Euclid. `region` crops a stereograph to one half, or a printed plate to its
+// photograph without the caption. Source item in the comment beside each.
+const cdmThumb = (item: string, region = "full") =>
+  `https://cplorg.contentdm.oclc.org/iiif/2/${item}/${region}/800,/0/default.jpg`;
+
+const MILLIONAIRES_ROW_SEED: Array<Pick<Photo, "id" | "x" | "y" | "year" | "title" | "address" | "photographer" | "note" | "thumb">> = [
   { id: "mr-1", x: 480, y: 380, year: 1900, title: "Euclid Ave at E. 12th",
     address: "Euclid & E. 12th", photographer: "unknown",
-    note: "The Wade mansion stood on the south side of Euclid until 1925." },
+    note: "The Wade mansion stood on the south side of Euclid until 1925.",
+    thumb: cdmThumb("p4014coll18:68") /* Euclid Avenue 1900 at East 14th Street */ },
   { id: "mr-2", x: 540, y: 360, year: 1903, title: "Stone gate at the Hanna estate",
-    address: "Euclid & E. 18th", photographer: "unknown", note: null },
+    address: "Euclid & E. 18th", photographer: "unknown", note: null,
+    thumb: cdmThumb("p4014coll14:96") /* Residence of Mr. L. C. Hanna */ },
   { id: "mr-3", x: 600, y: 340, year: 1906, title: "Carriage drive, Euclid Ave",
     address: "Euclid & E. 22nd", photographer: "unknown",
-    note: "The Avenue was paved with cedar blocks. You can still find them under the asphalt." },
+    note: "The Avenue was paved with cedar blocks. You can still find them under the asphalt.",
+    thumb: cdmThumb("p4014coll18:42") /* Euclid Avenue 1890 at East 30th Street */ },
   { id: "mr-4", x: 660, y: 320, year: 1909, title: "Brush mansion front gate",
-    address: "Euclid & E. 30th", photographer: "unknown", note: null },
+    address: "Euclid & E. 30th", photographer: "unknown", note: null,
+    thumb: cdmThumb("p128201coll0:2362", "pct:13,6,74,36") /* Plate 63: Residence of C. F. Brush, 1889 */ },
   { id: "mr-5", x: 720, y: 300, year: 1912, title: "Rockefeller house, side view",
     address: "Euclid & E. 40th", photographer: "unknown",
-    note: "Demolished 1938. The Cleveland Clinic main campus sits roughly here now." },
+    note: "Demolished 1938. The Cleveland Clinic main campus sits roughly here now.",
+    thumb: cdmThumb("p4014coll18:3475") /* Euclid Avenue and East 40th Street — Rockefeller House */ },
   { id: "mr-6", x: 780, y: 280, year: 1915, title: "Mather residence garden",
     address: "Euclid & E. 46th", photographer: "unknown",
-    note: "This building is gone. The corner is still here." },
+    note: "This building is gone. The corner is still here.",
+    thumb: cdmThumb("p4014coll18:3101") /* Mather Mansion at 2605 Euclid Avenue, 1932 */ },
   { id: "mr-7", x: 840, y: 260, year: 1918, title: "Bingham mansion, winter",
-    address: "Euclid & E. 55th", photographer: "unknown", note: null },
+    address: "Euclid & E. 55th", photographer: "unknown", note: null,
+    thumb: cdmThumb("p4014coll14:100") /* Charles W. Bingham House on Euclid Avenue */ },
   { id: "mr-8", x: 900, y: 240, year: 1921, title: "Severance house porch",
-    address: "Euclid & E. 62nd", photographer: "unknown", note: null },
+    address: "Euclid & E. 62nd", photographer: "unknown", note: null,
+    thumb: cdmThumb("p4014coll14:43") /* 2926 Euclid Avenue — C. H. Bulkley residence */ },
   { id: "mr-9", x: 960, y: 220, year: 1924, title: "Last of the Euclid mansions",
     address: "Euclid & E. 71st", photographer: "unknown",
-    note: "By 1924 most of the Row was rooming houses or commercial conversions." },
+    note: "By 1924 most of the Row was rooming houses or commercial conversions.",
+    thumb: cdmThumb("p4014coll18:9262", "pct:9,14,34,72") /* Euclid Avenue residences, ca. 1872–1894 (stereograph) */ },
   { id: "mr-10", x: 1020, y: 200, year: 1927, title: "Euclid Ave widening",
     address: "Euclid & E. 79th", photographer: "Plain Dealer",
-    note: "The Avenue was widened. Setbacks vanished. The Row vanished with them." },
+    note: "The Avenue was widened. Setbacks vanished. The Row vanished with them.",
+    thumb: cdmThumb("p4014coll18:3341") /* Euclid Avenue 1924 CP06319 */ },
   { id: "mr-11", x: 1080, y: 180, year: 1928, title: "Vacant lot, former Hay estate",
-    address: "Euclid & E. 86th", photographer: "Plain Dealer", note: null },
+    address: "Euclid & E. 86th", photographer: "Plain Dealer", note: null,
+    thumb: cdmThumb("p128201coll0:2409", "pct:13,5,74,37") /* Residence of Mrs. John Hay, 1911 */ },
 ];
 
 export const MILLIONAIRES_ROW: Photo[] = MILLIONAIRES_ROW_SEED.map((p) => ({

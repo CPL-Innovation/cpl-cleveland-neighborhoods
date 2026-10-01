@@ -958,7 +958,9 @@ export function StoryPanel({
               }}>{String(i + 1).padStart(2, "0")}</div>
               <div style={{
                 width: 120, height: 78,
-                background: "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)",
+                background: s.thumb
+                  ? `center / cover no-repeat url(${s.thumb}), #1A1814`
+                  : "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)",
                 borderRadius: 6,
               }} />
               <div>
