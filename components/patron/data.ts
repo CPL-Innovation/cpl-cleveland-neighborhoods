@@ -150,50 +150,54 @@ const CLEVELAND_PHOTOS: Photo[] = [
 const cdmThumb = (item: string, region = "full") =>
   `https://cplorg.contentdm.oclc.org/iiif/2/${item}/${region}/800,/0/default.jpg`;
 
-const MILLIONAIRES_ROW_SEED: Array<Pick<Photo, "id" | "x" | "y" | "year" | "title" | "address" | "photographer" | "note" | "thumb">> = [
-  { id: "mr-1", x: 480, y: 380, year: 1900, title: "Euclid Ave at E. 12th",
+// Placeholder positions: each stop sits on Euclid Avenue at the cross street in its `address`
+// (E. 12th → E. 86th), placed by hand along the avenue's line — approximate, not geocoded. The
+// prototype's original viewBox x/y ran the trail out past Cleveland Heights.
+const MILLIONAIRES_ROW_SEED: Array<Pick<Photo, "id" | "year" | "title" | "address" | "photographer" | "note" | "thumb"> & { lat: number; lng: number }> = [
+  { id: "mr-1", lat: 41.5008, lng: -81.6826, year: 1900, title: "Euclid Ave at E. 12th",
     address: "Euclid & E. 12th", photographer: "unknown",
     note: "The Wade mansion stood on the south side of Euclid until 1925.",
     thumb: cdmThumb("p4014coll18:68") /* Euclid Avenue 1900 at East 14th Street */ },
-  { id: "mr-2", x: 540, y: 360, year: 1903, title: "Stone gate at the Hanna estate",
+  { id: "mr-2", lat: 41.5017, lng: -81.6767, year: 1903, title: "Stone gate at the Hanna estate",
     address: "Euclid & E. 18th", photographer: "unknown", note: null,
     thumb: cdmThumb("p4014coll14:96") /* Residence of Mr. L. C. Hanna */ },
-  { id: "mr-3", x: 600, y: 340, year: 1906, title: "Carriage drive, Euclid Ave",
+  { id: "mr-3", lat: 41.5021, lng: -81.673, year: 1906, title: "Carriage drive, Euclid Ave",
     address: "Euclid & E. 22nd", photographer: "unknown",
     note: "The Avenue was paved with cedar blocks. You can still find them under the asphalt.",
     thumb: cdmThumb("p4014coll18:42") /* Euclid Avenue 1890 at East 30th Street */ },
-  { id: "mr-4", x: 660, y: 320, year: 1909, title: "Brush mansion front gate",
+  { id: "mr-4", lat: 41.5027, lng: -81.6655, year: 1909, title: "Brush mansion front gate",
     address: "Euclid & E. 30th", photographer: "unknown", note: null,
     thumb: cdmThumb("p128201coll0:2362", "pct:13,6,74,36") /* Plate 63: Residence of C. F. Brush, 1889 */ },
-  { id: "mr-5", x: 720, y: 300, year: 1912, title: "Rockefeller house, side view",
+  { id: "mr-5", lat: 41.503, lng: -81.656, year: 1912, title: "Rockefeller house, side view",
     address: "Euclid & E. 40th", photographer: "unknown",
     note: "Demolished 1938. The Cleveland Clinic main campus sits roughly here now.",
     thumb: cdmThumb("p4014coll18:3475") /* Euclid Avenue and East 40th Street — Rockefeller House */ },
-  { id: "mr-6", x: 780, y: 280, year: 1915, title: "Mather residence garden",
+  { id: "mr-6", lat: 41.5031, lng: -81.65, year: 1915, title: "Mather residence garden",
     address: "Euclid & E. 46th", photographer: "unknown",
     note: "This building is gone. The corner is still here.",
     thumb: cdmThumb("p4014coll18:3101") /* Mather Mansion at 2605 Euclid Avenue, 1932 */ },
-  { id: "mr-7", x: 840, y: 260, year: 1918, title: "Bingham mansion, winter",
+  { id: "mr-7", lat: 41.5032, lng: -81.6415, year: 1918, title: "Bingham mansion, winter",
     address: "Euclid & E. 55th", photographer: "unknown", note: null,
     thumb: cdmThumb("p4014coll14:100") /* Charles W. Bingham House on Euclid Avenue */ },
-  { id: "mr-8", x: 900, y: 240, year: 1921, title: "Severance house porch",
+  { id: "mr-8", lat: 41.5031, lng: -81.635, year: 1921, title: "Severance house porch",
     address: "Euclid & E. 62nd", photographer: "unknown", note: null,
     thumb: cdmThumb("p4014coll14:43") /* 2926 Euclid Avenue — C. H. Bulkley residence */ },
-  { id: "mr-9", x: 960, y: 220, year: 1924, title: "Last of the Euclid mansions",
+  { id: "mr-9", lat: 41.503, lng: -81.627, year: 1924, title: "Last of the Euclid mansions",
     address: "Euclid & E. 71st", photographer: "unknown",
     note: "By 1924 most of the Row was rooming houses or commercial conversions.",
     thumb: cdmThumb("p4014coll18:9262", "pct:9,14,34,72") /* Euclid Avenue residences, ca. 1872–1894 (stereograph) */ },
-  { id: "mr-10", x: 1020, y: 200, year: 1927, title: "Euclid Ave widening",
+  { id: "mr-10", lat: 41.5029, lng: -81.6195, year: 1927, title: "Euclid Ave widening",
     address: "Euclid & E. 79th", photographer: "Plain Dealer",
     note: "The Avenue was widened. Setbacks vanished. The Row vanished with them.",
     thumb: cdmThumb("p4014coll18:3341") /* Euclid Avenue 1924 CP06319 */ },
-  { id: "mr-11", x: 1080, y: 180, year: 1928, title: "Vacant lot, former Hay estate",
+  { id: "mr-11", lat: 41.5027, lng: -81.613, year: 1928, title: "Vacant lot, former Hay estate",
     address: "Euclid & E. 86th", photographer: "Plain Dealer", note: null,
     thumb: cdmThumb("p128201coll0:2409", "pct:13,5,74,37") /* Residence of Mrs. John Hay, 1911 */ },
 ];
 
 export const MILLIONAIRES_ROW: Photo[] = MILLIONAIRES_ROW_SEED.map((p) => ({
   ...p,
+  ...projectLatLng(p.lat, p.lng), // legacy x/y kept in step with the real point
   featured: true,
   neighborhood: "Midtown · Euclid Corridor",
   rights: p.year < 1931 ? "Public Domain (pre-1931)" : "CPL — display only",
@@ -274,28 +278,28 @@ export function applyPatronEnrichment(
   });
 }
 
-// Adapt a unified box-scan photo (from /api/patron/facets — the normalized 99) onto the map.
-// Requires real coordinates (set by the Finalize stage's geocode/pin) + a usable year; the rest
-// stay in the pool but off the map, exactly like ungeocoded ContentDM records. The honesty label
-// (aiExtracted) travels with it since caption/facets are AI-extracted + staff-reviewable.
-export function adaptFacetPhoto(fp: import("@/lib/types").FacetPhoto): Photo | null {
-  if (fp.lat == null || fp.lng == null) return null;
-  if (!Number.isFinite(fp.year ?? NaN)) return null;
-  const { x, y } = projectLatLng(fp.lat, fp.lng);
+// A unified box-scan photo (from /api/patron/facets — the normalized 99) as a Photo. ONE adapter
+// for every surface: the map, What's in the Picture, the exhibits. There used to be two, which
+// disagreed on the id (`box-…` vs bare chc_id — the same print counted twice) and on rights (the
+// browse copy stamped every print "Public Domain (pre-1931)", including ones from 1983).
+// Coordinates and a usable year are optional here; `adaptFacetPhoto` is the map's stricter gate.
+// The honesty label (aiExtracted) travels with it since caption/facets are AI-extracted.
+export function boxScanPhoto(fp: import("@/lib/types").FacetPhoto): Photo {
+  const placed = fp.lat != null && fp.lng != null;
+  const { x, y } = placed ? projectLatLng(fp.lat as number, fp.lng as number) : { x: 0, y: 0 };
   return {
     id: `box-${fp.chc_id}`,
     x, y,
-    year: fp.year as number,
+    year: Number.isFinite(fp.year ?? NaN) ? (fp.year as number) : 0,
     title: fp.address || fp.chc_id,
     neighborhood: "Cleveland · City Hall box",
     address: fp.address || "",
-    photographer: "unknown",
+    photographer: "City of Cleveland (Ohio)",
     rights: "CPL — display only",
     branch: "Cleveland Public Library",
     note: null,
     thumb: fp.jpeg_url,
-    lat: fp.lat,
-    lng: fp.lng,
+    ...(placed ? { lat: fp.lat as number, lng: fp.lng as number } : {}),
     facets: fp.facets,
     caption: fp.caption,
     aiExtracted: true,
@@ -304,7 +308,41 @@ export function adaptFacetPhoto(fp: import("@/lib/types").FacetPhoto): Photo | n
   };
 }
 
+// The map's gate: real coordinates (set by the Finalize stage's geocode/pin) + a usable year. The
+// rest stay in the pool but off the map, exactly like ungeocoded ContentDM records.
+export function adaptFacetPhoto(fp: import("@/lib/types").FacetPhoto): Photo | null {
+  if (fp.lat == null || fp.lng == null) return null;
+  if (!Number.isFinite(fp.year ?? NaN)) return null;
+  return boxScanPhoto(fp);
+}
+
 // The curated demo pool — the landing fetches + merges harvested records on top of this.
 export const CURATED_PHOTOS: Photo[] = [...CLEVELAND_PHOTOS, ...MILLIONAIRES_ROW];
 
 export { CLEVELAND_PHOTOS };
+
+/**
+ * A thumbnail-sized URL for a photo's image.
+ *
+ * Box-scan "thumbs" are the full ~2000px derivative (~400KB each) served from our own
+ * /derivatives/, so a gallery of them meant tens of megabytes for postage stamps. Local paths go
+ * through Next's built-in image resizer (no config needed for same-origin files); anything
+ * absolute — ContentDM's IIIF thumbnails are already 400px, Supabase URLs would need
+ * remotePatterns — passes through untouched. `w` must be one of Next's allowed widths.
+ */
+export function thumbUrl(src: string | undefined | null, w: 256 | 384 | 640 | 1080 = 384): string | undefined {
+  if (!src) return undefined;
+  if (!src.startsWith("/") || src.startsWith("//")) return src;
+  return `/_next/image?url=${encodeURIComponent(src)}&w=${w}&q=72`;
+}
+
+/**
+ * A large URL for a photo shown big (an exhibit cover, a stop). Harvested ContentDM thumbs are
+ * IIIF at 400px — the same service hands out any width, so ask it for 1200 rather than stretching
+ * a postage stamp across the page. Local box-scan derivatives go through the resizer at 1080.
+ */
+export function largeUrl(src: string | undefined | null): string | undefined {
+  if (!src) return undefined;
+  if (/\/iiif\/2\/.+\/full\/\d+,\//.test(src)) return src.replace(/\/full\/\d+,\//, "/full/1200,/");
+  return thumbUrl(src, 1080);
+}

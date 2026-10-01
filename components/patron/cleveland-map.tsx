@@ -7,9 +7,12 @@ import React from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./patron.css";
-import { MILLIONAIRES_ROW, unprojectXY, type Photo } from "./data";
+import { MILLIONAIRES_ROW, unprojectXY, thumbUrl, type Photo } from "./data";
 import { basemap } from "./basemap";
+import { C } from "./theme";
 import { groupIntoPlaces, yearSpan } from "@/lib/patron-places";
+
+export interface MapBounds { north: number; south: number; east: number; west: number }
 
 interface ClevelandMapProps {
   width?: number;
@@ -20,9 +23,21 @@ interface ClevelandMapProps {
   hoveredId?: string | null;
   onDotClick?: ((p: Photo) => void) | null;
   onDotHover?: ((id: string | null) => void) | null;
+  /** Reports the map's real zoom (in the `zoom` prop's units) after wheel/pinch/button zooms, so
+   *  the parent's +/− buttons step from where the map actually is rather than a stale value. */
+  onZoomChange?: ((zoom: number) => void) | null;
+  /** The area on screen, after every pan/zoom/resize — what the gallery view shows. */
+  onBoundsChange?: ((b: MapBounds) => void) | null;
+  /** Fly the map to fit these points ("see this exhibit on the map"). A new `key` re-triggers it. */
+  focus?: { key: number; points: { lat: number; lng: number }[] } | null;
   nearYou?: { x?: number; y?: number; lat?: number; lng?: number } | null;
   photos?: Photo[];
 }
+
+// At the map's deepest zoom the dots have room to become pictures: each corner shows one of
+// its photographs as a thumbnail. Below it, thumbnails would pile into each other, so it's dots.
+const MAX_ZOOM = 18;
+const THUMB_ZOOM = MAX_ZOOM;
 
 const esc = (s: unknown): string =>
   String(s ?? "").replace(/[<>&"]/g, (c) => (
@@ -33,11 +48,14 @@ export default function ClevelandMap({
   width = 1200,
   height = 700,
   zoom = 1,
-  yearRange = [1880, 2020],
+  yearRange = [1880, 2025],
   selectedId = null,
   hoveredId = null,
   onDotClick = null,
   onDotHover = null,
+  onZoomChange = null,
+  onBoundsChange = null,
+  focus = null,
   nearYou = null,
   photos = [],
 }: ClevelandMapProps) {
@@ -51,8 +69,12 @@ export default function ClevelandMap({
   const nearYouRef = React.useRef<L.Marker | null>(null);
 
   // Keep callbacks fresh without retriggering the markers effect.
-  const cbRef = React.useRef({ onDotClick, onDotHover });
-  cbRef.current = { onDotClick, onDotHover };
+  const cbRef = React.useRef({ onDotClick, onDotHover, onZoomChange, onBoundsChange });
+  cbRef.current = { onDotClick, onDotHover, onZoomChange, onBoundsChange };
+
+  // Dots or thumbnails — flips only when the zoom crosses THUMB_ZOOM, so ordinary zooming
+  // doesn't rebuild every marker.
+  const [thumbMode, setThumbMode] = React.useState(false);
 
   // ── Mount: initialise Leaflet, base tiles, featured corridor ──
   React.useEffect(() => {
@@ -62,7 +84,7 @@ export default function ClevelandMap({
       center: [41.4995, -81.6938], // Public Square
       zoom: 13,
       minZoom: 11,
-      maxZoom: 18,
+      maxZoom: MAX_ZOOM,
       zoomControl: false,
       attributionControl: true,
       zoomSnap: 0.25,
@@ -94,20 +116,33 @@ export default function ClevelandMap({
       }).addTo(map);
     }
 
-    // Featured Millionaire's Row corridor — soft glow + crisp dashed line.
-    const corridor = MILLIONAIRES_ROW.map((p) => {
-      const ll = unprojectXY(p.x, p.y);
-      return [ll.lat, ll.lng] as [number, number];
-    });
+    // Featured Millionaire's Row corridor — a marigold band (the featured accent, as a rule)
+    // under a dotted ink line, since marigold alone barely separates from the pale basemap.
+    const corridor = MILLIONAIRES_ROW.map((p) => [p.lat as number, p.lng as number] as [number, number]);
     const corridorGlow = L.polyline(corridor, {
-      color: "#C8983A", weight: 14, opacity: 0.18,
+      color: C.marigold, weight: 12, opacity: 0.32,
       lineCap: "round", lineJoin: "round", interactive: false,
     }).addTo(map);
     const corridorDash = L.polyline(corridor, {
-      color: "#C8983A", weight: 2, opacity: 0.7,
+      color: C.ink, weight: 2, opacity: 0.55,
       dashArray: "1, 7", lineCap: "round", interactive: false,
     }).addTo(map);
     corridorRef.current = L.layerGroup([corridorGlow, corridorDash]).addTo(map);
+
+    const syncThumbMode = () => setThumbMode(map.getZoom() >= THUMB_ZOOM - 0.01);
+    map.on("zoomend", syncThumbMode);
+    map.on("zoomend", () => {
+      const z = +(1 + (map.getZoom() - 13) / 2.5).toFixed(2);
+      cbRef.current.onZoomChange?.(z);
+    });
+    syncThumbMode();
+
+    const reportBounds = () => {
+      const b = map.getBounds();
+      cbRef.current.onBoundsChange?.({ north: b.getNorth(), south: b.getSouth(), east: b.getEast(), west: b.getWest() });
+    };
+    map.on("moveend resize", reportBounds); // pans, zooms, and the container changing size
+    map.whenReady(reportBounds);
 
     mapRef.current = map;
 
@@ -116,6 +151,14 @@ export default function ClevelandMap({
       mapRef.current = null;
     };
   }, []);
+
+  // ── Fly to a set of points ──
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus || !focus.points.length) return;
+    const b = L.latLngBounds(focus.points.map((p) => [p.lat, p.lng] as [number, number]));
+    map.flyToBounds(b, { padding: [120, 120], maxZoom: 16, duration: 0.9 });
+  }, [focus?.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Resize when container changes ──
   React.useEffect(() => {
@@ -149,7 +192,10 @@ export default function ClevelandMap({
       const inRange = place.photos.filter((p) => p.year >= lo && p.year <= hi);
       const isIn = inRange.length > 0;
       const shown = isIn ? inRange : place.photos;
-      const lead = shown[0];
+      // In thumbnail mode the marker IS a photograph, so the one it shows is the one a click
+      // opens — the first with an image; a corner with no image anywhere stays a dot.
+      const pictured = thumbMode ? shown.find((p) => p.thumb) : undefined;
+      const lead = pictured ?? shown[0];
       const isFeatured = shown.some((p) => p.featured);
       const stacked = inRange.length > 1;
 
@@ -163,12 +209,21 @@ export default function ClevelandMap({
       ].filter(Boolean).join(" ");
 
       const badge = stacked ? `<span class="cm-dot-count">${inRange.length}</span>` : "";
-      const icon = L.divIcon({
-        className: "cm-dot-wrap",
-        html: `<div class="${classes}" data-place-key="${esc(place.key)}"><span class="cm-dot-ring"></span><span class="cm-dot-core"></span>${badge}</div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11],
-      });
+      const icon = pictured
+        ? L.divIcon({
+            className: "cm-dot-wrap",
+            html: `<div class="${classes} cm-dot--thumb" data-place-key="${esc(place.key)}">` +
+              `<img src="${esc(thumbUrl(pictured.thumb, 256))}" alt="" loading="lazy" decoding="async" draggable="false">${badge}</div>`,
+            iconSize: [112, 84],
+            iconAnchor: [56, 42],
+            tooltipAnchor: [0, -43],
+          })
+        : L.divIcon({
+            className: "cm-dot-wrap",
+            html: `<div class="${classes}" data-place-key="${esc(place.key)}"><span class="cm-dot-ring"></span><span class="cm-dot-core"></span>${badge}</div>`,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11],
+          });
 
       const marker = L.marker([place.lat, place.lng], {
         icon,
@@ -202,7 +257,7 @@ export default function ClevelandMap({
       marker.addTo(map);
       markersRef.current.set(place.key, marker);
     });
-  }, [lo, hi, photos]);
+  }, [lo, hi, photos, thumbMode]);
 
   // ── Highlight selected (CSS class on the div-icon) ──
   React.useEffect(() => {
@@ -214,7 +269,9 @@ export default function ClevelandMap({
       if (!dot) return;
       dot.classList.toggle("cm-dot--selected", key === selectedPlace);
     });
-  }, [selectedId]);
+    // Re-applied after every marker rebuild (time range, pool, dots ↔ thumbnails), which
+    // recreates the elements and would otherwise drop the highlight.
+  }, [selectedId, lo, hi, photos, thumbMode]);
 
   // ── "You are here" marker ──
   React.useEffect(() => {
@@ -240,5 +297,5 @@ export default function ClevelandMap({
   // is handled by Leaflet's :hover CSS on the div-icon, so no effect is needed here.
   void hoveredId;
 
-  return <div ref={containerRef} style={{ width, height, background: "#F1ECE2" }} />;
+  return <div ref={containerRef} style={{ width, height, background: C.sunken }} />;
 }

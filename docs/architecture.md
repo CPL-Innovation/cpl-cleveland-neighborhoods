@@ -2,17 +2,24 @@
 
 > **Reference** (current truth — update in the same change that alters behavior). For *why*
 > decisions were made, see the dated logs in [`technical/`](../technical/).
-> Last reflects: the Next.js + Supabase migration of the staff/scan slice, with
-> **local-by-default** dev backends (local Postgres + on-disk JPEG store).
+> Last reflects: the patron site on the Dateline Cleveland design system — map ↔ gallery,
+> full-page Exhibits and What's in the Picture, thumbnails at max zoom, the 3D demo — and the
+> `middleware.ts` guard that keeps the staff side local. (Staff/scan: Next.js + Supabase,
+> local-by-default dev backends.)
 
 ## System at a glance
 
 ```
                          ┌──────────────────────────────────────────────┐
-  Patron (later pass)    │  STATIC PROTOTYPE  (not yet migrated)          │
-  index.html + *.jsx ────┤  CDN React + Babel-in-browser, Leaflet map     │
-                         │  reads data/tier3-all/records.json             │
+  Patron (live)          │  NEXT.JS — <PatronLanding/> at /               │
+  / ─────────────────────┤  components/patron/*: Leaflet map (client-only)│
+                         │   map ↔ gallery · Exhibits · What's in the     │
+                         │   Picture · photo panel (then/now/3D)          │
+                         │  static catalog: /data/tier3-all/records.json  │
+  /api/patron/* ─────────┤  live read-only enrichment overlays ──────────┼──► Postgres¹
                          └──────────────────────────────────────────────┘
+  middleware.ts — /staff, /api/scan/*, /api/staff/* answer 404 unless the request is from this
+  machine (auth is deferred; this is what makes a tunnelled dev server safe to share).
 
                          ┌──────────────────────────────────────────────┐
   Staff + scan (live)    │  NEXT.JS 14 (App Router, TypeScript)           │
@@ -84,6 +91,44 @@ Not everything in CN is a provenance marker: `ConfidenceBadge` and `↑ in produ
 own (non-info) colors deliberately — confidence and publication state are different claims from
 provenance, and flattening them into the honesty palette would erase that distinction.
 
+## Design system (patron site)
+
+The patron site does **not** use `@cpl/tokens`. It adopts the **Dateline Cleveland** design
+system ("flat civic discipline": Spectral / Work Sans / JetBrains Mono, `navy` = brand +
+interaction, `marigold` = the one accent and only ever a fill or rule, 1px hairline division,
+0 radius in page flow, shadows only on floating layers, a glyph on every action). Its values live
+once, in `components/patron/theme.ts` (`C` colours · `F` families · `T` type styles · `SHADOW`);
+`patronCssVars` puts the same values on the landing root as CSS variables, which `patron.css`
+(Leaflet's injected DOM + the `dc-` hover/focus/pressed classes) reads — no second copy.
+
+One deliberate deviation from the source system: its `tertiary` (#8a94a3, 3.07:1) fails AA for
+the mono meta it carries, so CN darkens it to `#646d7b` (5.2:1 on canvas, 4.75:1 on sunken), as
+the system's own README asks adopters to; provenance notes use the info ink `#2a6580`.
+
+## Surfaces (patron site)
+
+One client page (`components/patron/landing.tsx`) under a SiteHeader (provenance strip + masthead
+with section tabs). Sections are React state, not routes:
+
+- **The Map** — Leaflet (`cleveland-map.tsx`, `next/dynamic` ssr:false). One dot per *place*
+  (`lib/patron-places.ts`); at the deepest zoom (18) each place becomes a thumbnail of one of its
+  photographs. A **Map | Gallery** switch (`G`) lays out the photographs inside the map's current
+  bounds as a decade-grouped grid (`gallery.tsx`) — the map reports its bounds (`onBoundsChange`)
+  and stays mounted underneath, so switching back loses nothing. Both views share the time range.
+- **Exhibits** (`exhibits.tsx`) — full page. One curated exhibit (Millionaire's Row) and drafts
+  gathered by rule from real records (a street, the transcribed signs, a neighbourhood then and
+  now), each draft tagged and carrying a note that no curator has written it. An exhibit can fly
+  the map to its stops (`ClevelandMap` `focus`).
+- **What's in the Picture** (`browse-by-picture.tsx`) — full page over the 99 faceted box scans:
+  facet rail + a search over the AI-written descriptions and transcribed signs.
+- **Photo panel** (`panels.tsx`) — drawer · expanded dialog; Then / Now (Street View) / Side by
+  side; and, for one photograph only, a 3D model view and a full-panel 3D world (`demos.ts`).
+
+While a full page covers the map, the map layer is `inert` + `aria-hidden`. Box scans enter every
+surface through one adapter, `boxScanPhoto` (`data.ts`). Small images of local derivatives go
+through Next's resizer (`thumbUrl`); catalog IIIF images are asked for at the size shown
+(`largeUrl`).
+
 ## Surfaces (staff app)
 
 The staff app is one client SPA (`components/staff/app.tsx`, mounted at `app/staff/page.tsx`).
@@ -111,7 +156,7 @@ Shared chrome in `components/staff/shell.tsx`; shared primitives in `components/
 - **DB access:** `lib/db.ts` — lazy, backend-agnostic Drizzle client. `prepare: false` (required by the Supabase transaction pooler; harmless against local Postgres).
 - **Store layer:** `lib/scan-store.ts` (read-modify-write, deep-merges the `review` JSONB; `buildEnrichment` builds the `photo_enrichment`-shaped accept payload — no geocoding in this pilot).
 - **API:** `app/api/scan/*` — see [`api.md`](api.md).
-- **Auth:** none yet (deferred). When added, it gates the staff routes; the SPA shell is the natural seam. Supabase Auth is the likely fit.
+- **Auth:** none yet (deferred). When added, it gates the staff routes; the SPA shell is the natural seam. Supabase Auth is the likely fit. Until then `middleware.ts` refuses `/staff`, `/api/scan/*` and `/api/staff/*` (404) to any request not from this machine — Host must be localhost, no tunnel header (`CF-Connecting-IP`, ngrok), and every `X-Forwarded-For` address loopback (Next's dev server adds a loopback XFF to its own requests, so presence alone proves nothing). This is a sharing guard, not auth: a deployed site still needs real auth.
 
 ## Deploy target
 
@@ -121,7 +166,7 @@ batch runs on an operator's machine, not Vercel. Env vars go in the Vercel dashb
 
 ## Known gaps / future passes
 
-- Patron site (Leaflet map) is migrated. The **convergence slice** ("browse by what's in the picture") added the first **live enrichment→patron read** (`/api/patron/facets` → `lib/patron-facets.ts`): read-only over the 99 graduated facets (`photo_enrichment` ⋈ `scan_review`). Public-read hardening (read-only role / RLS / rate-limiting) is deferred to host-on-commit; the catalog read stays a static harvest.
+- Patron site is migrated and re-skinned (see *Surfaces (patron site)*). The **convergence slice** ("browse by what's in the picture") added the first **live enrichment→patron read** (`/api/patron/facets` → `lib/patron-facets.ts`): read-only over the 99 graduated facets (`photo_enrichment` ⋈ `scan_review`). Public-read hardening (read-only role / RLS / rate-limiting) is deferred to host-on-commit; the catalog read stays a static harvest.
 - **The harvested catalog now carries a live enrichment overlay too** (`/api/patron/enrichment` → `lib/patron-enrichment.ts`): the catalog stays a static file, and the landing joins the enrichment store onto it **on the ContentDM id** in the browser. Without that join, anything staff enrich about a *cataloged* photograph is invisible to patrons — which is how a photo could have a recorded then-and-now and still show no "now". Today the overlay carries the viewpoint only; it is the slot for the rest.
 - `photo_enrichment` write-back from the *record-edit* surface has **started**: the then-and-now viewpoint (`POST /api/staff/photos/[id]/rephoto` → `lib/rephoto-store.ts`) is the first real write on that screen, and the first that **upserts a ContentDM row** (identity + `rephoto_*` only — no cataloged fact is copied into a second writable home). The rest of that screen is still mockup; its other writers remain the scan-accept hook and the Tier 1.5 Stage 0 facet graduation (`lib/facet-review-store.ts`, scoped to the validated 99).
 - Auth + roles (librarian-editor vs admin).

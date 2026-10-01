@@ -15,28 +15,56 @@ import {
   type Photo, type HarvestedRecord,
 } from "./data";
 import type { FacetPhoto, PatronEnrichment } from "@/lib/types";
-import { SearchIcon, SearchPanel, PhotoDetailPanel, StoryPanel } from "./panels";
+import { SearchIcon, SearchPanel, PhotoDetailPanel } from "./panels";
+import { buildExhibits, exhibitPoints, ExhibitsIndex, ExhibitPage, type Exhibit } from "./exhibits";
 import { BrowseByPicture } from "./browse-by-picture";
+import { GalleryView, photosInBounds } from "./gallery";
+import type { MapBounds } from "./cleveland-map";
+import { C, F, T, SHADOW, HATCH, patronCssVars } from "./theme";
 
 const ClevelandMap = dynamic(() => import("./cleveland-map"), { ssr: false });
 
 const MIN_YEAR = 1880;
-const MAX_YEAR = 2020;
+// 2025, not 2020: the collection holds 2022 photographs (the Clark-Fulton street series), and a
+// slider ending at 2020 meant dragging it — or Reset — silently dropped them.
+const MAX_YEAR = 2025;
+const FULL_RANGE: [number, number] = [MIN_YEAR, MAX_YEAR];
 // Public Square — the synthetic "near you" point for the demo.
 const NEAR_YOU = { x: 484, y: 376, label: "Public Square" };
 
 export default function PatronLanding() {
   const [photos, setPhotos] = React.useState<Photo[]>(CURATED_PHOTOS);
-  const [yearRange, setYearRange] = React.useState<[number, number]>([1880, 2025]);
+  const [yearRange, setYearRange] = React.useState<[number, number]>(FULL_RANGE);
   const [hoveredId, setHoveredId] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<Photo | null>(null);
   const [zoom, setZoom] = React.useState(1);
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
   const [nearYouActive, setNearYouActive] = React.useState(false);
-  const [storyOpen, setStoryOpen] = React.useState(false);
-  const [browseOpen, setBrowseOpen] = React.useState(false);
+  // The masthead's sections. EXHIBITS and WHAT'S IN THE PICTURE are full pages that cover the map
+  // (which stays mounted underneath, so THE MAP returns you exactly where you left it).
+  const [section, setSection] = React.useState<Section>("map");
+  const [exhibitId, setExhibitId] = React.useState<string | null>(null);
+  const [facetPhotos, setFacetPhotos] = React.useState<FacetPhoto[]>([]);
+  const [mapFocus, setMapFocus] = React.useState<{ key: number; points: { lat: number; lng: number }[] } | null>(null);
+  const sectionScrollRef = React.useRef<HTMLDivElement | null>(null);
+  // `inert` is set by hand: React 18 drops it as an unknown boolean attribute, and the newer
+  // @types/react types it as boolean, so neither spelling survives JSX.
+  const mapLayerRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const el = mapLayerRef.current;
+    if (!el) return;
+    el.toggleAttribute("inert", section !== "map");
+    if (section !== "map") el.setAttribute("aria-hidden", "true"); else el.removeAttribute("aria-hidden");
+  }, [section]);
   const [whisperOpen, setWhisperOpen] = React.useState(true);
+  // Closing the card only clears it off the map for this visit — the exhibit is still one click
+  // away under EXHIBITS in the masthead.
+  const [storyCardOpen, setStoryCardOpen] = React.useState(true);
+  // Map or gallery — two views of the same place. The gallery shows what's inside the map's
+  // current bounds, so the map stays mounted under it and reports its area as it moves.
+  const [mode, setMode] = React.useState<"map" | "gallery">("map");
+  const [bounds, setBounds] = React.useState<MapBounds | null>(null);
 
   // ── Merge the pool: curated seed + harvested ContentDM + the unified box-scan 99 ──
   // The box-scans (live read of the unified enrichment store) carry geocoded coords from the
@@ -57,13 +85,15 @@ export default function PatronLanding() {
       .then((r) => (r.ok ? r.json() : { photos: [] }))
       .then((d: { photos: PatronEnrichment[] }) => d.photos || [])
       .catch(() => [] as PatronEnrichment[]);
-    const boxScans = fetch("/api/patron/facets")
+    const facetRows = fetch("/api/patron/facets")
       .then((r) => (r.ok ? r.json() : { photos: [] }))
-      .then((d: { photos: FacetPhoto[] }) => (d.photos || []).map(adaptFacetPhoto).filter((p): p is Photo => p !== null))
-      .catch(() => [] as Photo[]);
+      .then((d: { photos: FacetPhoto[] }) => d.photos || [])
+      .catch(() => [] as FacetPhoto[]);
+    const boxScans = facetRows.then((rows) => rows.map(adaptFacetPhoto).filter((p): p is Photo => p !== null));
 
-    Promise.all([harvest, enrichment, boxScans]).then(([harvested, overlay, box]) => {
+    Promise.all([harvest, enrichment, boxScans, facetRows]).then(([harvested, overlay, box, rows]) => {
       if (cancelled) return;
+      setFacetPhotos(rows); // all 99, placed or not — the exhibits draw on the unplaced ones too
       const enriched = applyPatronEnrichment(harvested, overlay);
       setPhotos([...CLEVELAND_PHOTOS, ...enriched, ...box, ...MILLIONAIRES_ROW]);
       console.log(
@@ -90,16 +120,48 @@ export default function PatronLanding() {
   }, []);
 
   const visibleCount = photos.filter((p) => p.year >= yearRange[0] && p.year <= yearRange[1]).length;
+  const inViewCount = React.useMemo(
+    () => photosInBounds(photos, bounds).filter((p) => p.year > 0 && p.year >= yearRange[0] && p.year <= yearRange[1]).length,
+    [photos, bounds, yearRange],
+  );
   const totalCount = photos.length;
+
+  const exhibits = React.useMemo(() => buildExhibits(photos, facetPhotos), [photos, facetPhotos]);
+  const exhibit = exhibits.find((e) => e.id === exhibitId) ?? null;
+  const experiment = React.useMemo(() => photos.find((p) => String(p.contentdm_id) === "8617") ?? null, [photos]);
+
+  const goSection = (s: Section) => {
+    setSection(s);
+    if (s !== "exhibits") setExhibitId(null);
+    if (s === "map") setMode("map");
+    sectionScrollRef.current?.scrollTo({ top: 0 });
+  };
+  const openExhibit = (id: string | null) => {
+    setSection("exhibits");
+    setExhibitId(id);
+    sectionScrollRef.current?.scrollTo({ top: 0 });
+  };
+  const showExhibitOnMap = (e: Exhibit) => {
+    goSection("map");
+    setMapFocus({ key: Date.now(), points: exhibitPoints(e) });
+  };
 
   // ── Keyboard ──
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // One layer at a time: photo → search → an exhibit → the section → the gallery.
         if (selected) setSelected(null);
-        else if (browseOpen) setBrowseOpen(false);
-        else if (storyOpen) setStoryOpen(false);
         else if (searchOpen) setSearchOpen(false);
+        else if (exhibitId) setExhibitId(null);
+        else if (section !== "map") setSection("map");
+        else if (mode === "gallery") setMode("map");
+      }
+      // G flips map ↔ gallery — only when nothing is open and nobody is typing.
+      const typing = e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+      if (e.key.toLowerCase() === "g" && !e.metaKey && !e.ctrlKey && !e.altKey && !typing
+        && !selected && section === "map" && !searchOpen) {
+        setMode((m) => (m === "map" ? "gallery" : "map"));
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -108,21 +170,33 @@ export default function PatronLanding() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selected, storyOpen, searchOpen, browseOpen]);
+  }, [selected, section, exhibitId, searchOpen, mode]);
 
-  const zoomIn = () => setZoom((z) => Math.min(2.4, +(z + 0.2).toFixed(2)));
+  // 3 maps to Leaflet zoom 18 (cleveland-map: 13 + (z − 1) × 2.5) — the deepest level, where the
+  // dots become photographs. The old 2.4 cap stopped the + button at 16.5, short of it.
+  const zoomIn = () => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(2)));
   const zoomOut = () => setZoom((z) => Math.max(0.6, +(z - 0.2).toFixed(2)));
-  const resetView = () => { setZoom(1); setYearRange([1880, 2020]); setNearYouActive(false); };
+  const resetView = () => { setZoom(1); setYearRange(FULL_RANGE); setNearYouActive(false); };
 
   return (
-    <div style={{
-      width: "100%", height: "100%", background: "#F6F2EB", color: "#1A1814",
-      fontFamily: "'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    <div className="dc-root" style={{
+      ...patronCssVars,
+      width: "100%", height: "100%", background: C.canvas, color: C.body,
+      fontFamily: F.sans,
       WebkitFontSmoothing: "antialiased", display: "flex", flexDirection: "column",
       overflow: "hidden", position: "relative",
     }}>
-      <DesktopHeader onSearchClick={() => setSearchOpen(true)} onBrowseClick={() => setBrowseOpen(true)} />
+      <DesktopHeader
+        current={section}
+        onMapClick={() => goSection("map")}
+        onStoriesClick={() => openExhibit(null)}
+        onSearchClick={() => setSearchOpen(true)}
+        onBrowseClick={() => goSection("browse")}
+      />
       <div ref={mapWrapRef} style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        {/* The map and its overlays. While a full page covers them they're inert — out of the tab
+            order and the accessibility tree — so nobody can tab into a map they can't see. */}
+        <div ref={mapLayerRef} style={{ position: "absolute", inset: 0 }}>
         <ClevelandMap
           width={size.w}
           height={size.h}
@@ -132,6 +206,9 @@ export default function PatronLanding() {
           onDotHover={setHoveredId}
           onDotClick={(p) => setSelected(p)}
           zoom={zoom}
+          onZoomChange={setZoom}
+          onBoundsChange={setBounds}
+          focus={mapFocus}
           nearYou={nearYouActive ? NEAR_YOU : null}
           photos={photos}
         />
@@ -140,11 +217,60 @@ export default function PatronLanding() {
         <TimeRangeFilter value={yearRange} onChange={setYearRange}
           visibleCount={visibleCount} totalCount={totalCount} />
         <MapControls onZoomIn={zoomIn} onZoomOut={zoomOut} onReset={resetView} />
-        <StoryOfTheWeek onOpen={() => setStoryOpen(true)} />
-        <DensityLegend />
-        <AttributionPill visibleCount={visibleCount} totalCount={totalCount} yearRange={yearRange} />
+        {storyCardOpen && (
+          <StoryOfTheWeek onOpen={() => openExhibit("millionaires-row")} onDismiss={() => setStoryCardOpen(false)} />
+        )}
+        {/* The legend sits beside the story card; with the card gone it takes its corner. */}
+        <DensityLegend left={storyCardOpen ? 340 : 20} />
+        {section === "map" && <ViewToggle mode={mode} onMode={setMode} inViewCount={inViewCount} />}
+
+        {mode === "gallery" && (
+          <GalleryView
+            photos={photos}
+            bounds={bounds}
+            yearRange={yearRange}
+            onYearRange={setYearRange}
+            fullRange={FULL_RANGE}
+            timeControl={
+              <TimeRangeFilter value={yearRange} onChange={setYearRange}
+                visibleCount={inViewCount} totalCount={totalCount} embedded />
+            }
+            selectedId={selected ? selected.id : null}
+            onOpenPhoto={(p) => setSelected(p)}
+            onShowMap={() => setMode("map")}
+          />
+        )}
 
         {whisperOpen && <OnboardingWhisper onDismiss={() => setWhisperOpen(false)} />}
+        </div>
+
+        {/* EXHIBITS and WHAT'S IN THE PICTURE are full pages of their own, laid over the map under
+            the masthead. One scroll container for both, so each section scrolls as a page. */}
+        {section !== "map" && (
+          <div ref={sectionScrollRef} style={{ position: "absolute", inset: 0, zIndex: 8, background: C.canvas, overflowY: "auto" }}>
+            {section === "browse" && <BrowseByPicture onOpenPhoto={(p) => setSelected(p)} />}
+            {section === "exhibits" && !exhibit && (
+              <ExhibitsIndex
+                exhibits={exhibits}
+                onOpen={openExhibit}
+                onShowOnMap={showExhibitOnMap}
+                experiment={experiment}
+                onOpenPhoto={(p) => setSelected(p)}
+              />
+            )}
+            {section === "exhibits" && exhibit && (
+              <ExhibitPage
+                exhibit={exhibit}
+                next={exhibits.length > 1 ? exhibits[(exhibits.indexOf(exhibit) + 1) % exhibits.length] : null}
+                onBack={() => openExhibit(null)}
+                onOpen={openExhibit}
+                onOpenPhoto={(p) => setSelected(p)}
+                onShowOnMap={showExhibitOnMap}
+                scrollRoot={sectionScrollRef}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {searchOpen && (
@@ -166,135 +292,117 @@ export default function PatronLanding() {
         />
       )}
 
-      {storyOpen && (
-        <StoryPanel
-          onClose={() => setStoryOpen(false)}
-          onOpenPhoto={(p) => { setStoryOpen(false); setSelected(p); }}
-        />
-      )}
-
-      {browseOpen && (
-        <BrowseByPicture
-          onClose={() => setBrowseOpen(false)}
-          onOpenPhoto={(p) => setSelected(p)}
-        />
-      )}
     </div>
   );
 }
 
 // ── Header ──────────────────────────────────────────────────────
+// SiteHeader: a provenance strip saying what the visitor is looking at, then the masthead —
+// set-type wordmark (no logo), uppercase section tabs, a square search field.
 
-function DesktopHeader({ onSearchClick, onBrowseClick }: { onSearchClick: () => void; onBrowseClick: () => void }) {
+type Section = "map" | "exhibits" | "browse";
+
+function DesktopHeader({
+  current, onMapClick, onStoriesClick, onSearchClick, onBrowseClick,
+}: {
+  current: Section;
+  onMapClick: () => void;
+  onStoriesClick: () => void;
+  onSearchClick: () => void;
+  onBrowseClick: () => void;
+}) {
   return (
-    <div style={{
-      height: 72, borderBottom: "1px solid #D6CDBD", display: "flex", alignItems: "center",
-      padding: "0 32px", gap: 32, background: "rgba(246,242,235,0.92)",
-      backdropFilter: "blur(6px)", zIndex: 5, position: "relative",
-    }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <div style={{
-          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-          fontWeight: 460, fontSize: 24, letterSpacing: -0.4, lineHeight: 1, color: "#1A1814",
-        }}>
-          Cleveland&nbsp;Neighborhoods
-        </div>
-        <div style={{
-          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, serif",
-          fontStyle: "italic", fontWeight: 400, fontSize: 12.5, letterSpacing: 0.1,
-          lineHeight: 1, color: "#6B6359",
-        }}>
-          A century of Cleveland, mapped to the corner.
-        </div>
-      </div>
-      <div style={{ flex: 1 }} />
-      <nav style={{ display: "flex", gap: 28, fontSize: 14, letterSpacing: 0.1, color: "#1A1814" }}>
-        <NavLink>Stories</NavLink>
-        <NavLink onClick={onBrowseClick}>Browse</NavLink>
-        <NavLink>About</NavLink>
-      </nav>
-      <div style={{ width: 1, height: 22, background: "#D6CDBD", marginLeft: 4 }} />
-      <button onClick={onSearchClick} style={{
-        height: 36, padding: "0 14px", display: "flex", alignItems: "center", gap: 8,
-        background: "transparent", border: "1px solid #D6CDBD", borderRadius: 18,
-        color: "#1A1814", fontSize: 13,
-        fontFamily: "'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-        cursor: "pointer",
+    <header style={{ position: "relative", zIndex: 5, flexShrink: 0 }}>
+      <div style={{
+        background: C.sunken, borderBottom: `1px solid ${C.hairLight}`,
+        padding: "4px 32px", fontFamily: F.mono, fontSize: 10, lineHeight: 1.6,
+        letterSpacing: "0.08em", color: C.tertiary, textTransform: "uppercase",
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
       }}>
-        <SearchIcon />
-        <span style={{ color: "#6B6359" }}>Search the collection</span>
-        <span style={{
-          marginLeft: 14, fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-          fontSize: 11, color: "#A39684", letterSpacing: 0,
-        }}>⌘ K</span>
-      </button>
-    </div>
+        Cleveland Public Library · Photograph collection · Catalog records from ContentDM ·
+        Box-scan locations &amp; descriptions machine-extracted, curator-reviewable
+      </div>
+      <div style={{
+        background: C.canvas, borderBottom: `1px solid ${C.hairLight}`,
+        display: "flex", alignItems: "center", gap: 32, padding: "14px 32px",
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, whiteSpace: "nowrap" }}>
+          <span style={{ fontFamily: F.serif, fontSize: 24, fontWeight: 800, lineHeight: 1, color: C.navy }}>
+            Cleveland Neighborhoods
+          </span>
+          <span style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: "0.14em", color: C.tertiary }}>
+            1880–{MAX_YEAR}
+          </span>
+        </div>
+        <nav className="dc-nav" aria-label="Sections">
+          <button aria-current={current === "map"} onClick={onMapClick}>The Map</button>
+          <button aria-current={current === "exhibits"} onClick={onStoriesClick}>Exhibits</button>
+          <button aria-current={current === "browse"} onClick={onBrowseClick}>What&rsquo;s in the Picture</button>
+          <button>About</button>
+        </nav>
+        <div style={{ flex: 1 }} />
+        <button className="dc-search-trigger" onClick={onSearchClick} aria-label="Search the collection">
+          <SearchIcon color={C.navy} />
+          <span style={{ flex: 1, textAlign: "left" }}>Search the collection</span>
+          <span style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: "0.06em", color: C.tertiary }}>⌘K</span>
+        </button>
+      </div>
+    </header>
   );
 }
 
-function NavLink({ children, active, onClick }: { children: React.ReactNode; active?: boolean; onClick?: () => void }) {
-  const [hov, setHov] = React.useState(false);
-  return (
-    <a
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        color: active ? "#1A1814" : "#3D3833", textDecoration: "none", fontWeight: 500,
-        padding: "6px 0",
-        borderBottom: (active || hov) ? "1.5px solid #1F5963" : "1.5px solid transparent",
-        cursor: "pointer", transition: "border-color 120ms",
-      }}>{children}</a>
-  );
-}
+// ── Shared overlay frame ────────────────────────────────────────
+// Map overlays are floating layers — square, hairline-keyed, the one place a shadow is allowed.
+const overlay: React.CSSProperties = {
+  position: "absolute", zIndex: 4, background: C.canvas,
+  border: `1px solid ${C.hairMed}`, boxShadow: SHADOW.overlay,
+};
 
-// ── Geolocation pill ────────────────────────────────────────────
+// ── Geolocation ─────────────────────────────────────────────────
 
 function GeolocationPill({ active, onToggle }: { active: boolean; onToggle: () => void }) {
   return (
-    <button onClick={onToggle} style={{
-      position: "absolute", top: 24, right: 24, zIndex: 4,
-      display: "flex", alignItems: "center", gap: 8,
-      height: 40, padding: "0 16px 0 14px",
-      background: active ? "#1F5963" : "#FFFFFF",
-      color: active ? "#F6F2EB" : "#1A1814",
-      border: "1px solid " + (active ? "#1F5963" : "#D6CDBD"),
-      borderRadius: 999, boxShadow: "0 2px 12px rgba(26,24,20,0.06)",
-      fontSize: 13.5, cursor: "pointer",
-      fontFamily: "'Work Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    }}>
-      <LocationGlyph color={active ? "#F6F2EB" : "#A8362B"} />
-      <span>{active ? `Near you · ${NEAR_YOU.label}` : "Photos near you"}</span>
+    <button
+      onClick={onToggle}
+      aria-pressed={active}
+      className={`dc-btn ${active ? "dc-btn--primary" : "dc-btn--ghost"}`}
+      style={{ position: "absolute", top: 20, right: 20, zIndex: 4, boxShadow: SHADOW.overlay }}
+    >
+      <LocationGlyph color={active ? C.onNavy : C.navy} />
+      {active ? <>Near you · {NEAR_YOU.label} ✕</> : <>Photos near you →</>}
     </button>
   );
 }
 
-function LocationGlyph({ color = "#A8362B" }: { color?: string }) {
+function LocationGlyph({ color }: { color: string }) {
   return (
-    <svg width="14" height="16" viewBox="0 0 14 16" fill="none">
-      <path d="M7 1c-3.3 0-6 2.6-6 5.8 0 4.4 6 8.7 6 8.7s6-4.3 6-8.7C13 3.6 10.3 1 7 1z"
-        fill={color} stroke="#1A1814" strokeOpacity="0.2" strokeWidth="0.6" />
-      <circle cx="7" cy="6.6" r="2" fill="#fff" />
+    <svg width="11" height="13" viewBox="0 0 14 16" fill="none" aria-hidden>
+      <path d="M7 1c-3.3 0-6 2.6-6 5.8 0 4.4 6 8.7 6 8.7s6-4.3 6-8.7C13 3.6 10.3 1 7 1z" fill={color} />
+      <circle cx="7" cy="6.6" r="2" fill={color === C.navy ? C.canvas : C.navy} />
     </svg>
   );
 }
 
 // ── Time-range filter (draggable) ───────────────────────────────
+// A timeline on a 2px navy baseline (TimelineScrubber's rule); the selected span is the thick
+// navy bar, the handles square.
 
 function TimeRangeFilter({
-  value, onChange, visibleCount, totalCount,
+  value, onChange, visibleCount, totalCount, embedded,
 }: {
   value: [number, number];
   onChange: (v: [number, number]) => void;
   visibleCount: number;
   totalCount: number;
+  /** In the gallery's rail rather than floating on the map — no frame, fills its column. */
+  embedded?: boolean;
 }) {
   const [lo, hi] = value;
   const trackRef = React.useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = React.useState<"lo" | "hi" | null>(null);
 
   const decades = [1880, 1890, 1900, 1910, 1920, 1930, 1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
-  const labelDecades = [1880, 1900, 1920, 1940, 1960, 1980, 2000, 2020];
+  const labelDecades = embedded ? [1880, 1920, 1960, 2000] : [1880, 1900, 1920, 1940, 1960, 1980, 2000, 2020];
   const pct = (y: number) => ((y - MIN_YEAR) / (MAX_YEAR - MIN_YEAR)) * 100;
 
   React.useEffect(() => {
@@ -317,79 +425,72 @@ function TimeRangeFilter({
     };
   }, [dragging, lo, hi, onChange]);
 
+  const handle = (which: "lo" | "hi", at: number): React.ReactNode => (
+    <div
+      onMouseDown={(e) => { e.preventDefault(); setDragging(which); }}
+      role="slider"
+      aria-label={which === "lo" ? "Earliest year" : "Latest year"}
+      aria-valuemin={MIN_YEAR}
+      aria-valuemax={MAX_YEAR}
+      aria-valuenow={at}
+      style={{
+        position: "absolute", top: 4, left: `${pct(at)}%`, transform: "translateX(-50%)",
+        width: 12, height: 20, background: C.canvas,
+        border: `2px solid ${C.navy}`, boxSizing: "border-box",
+        cursor: "ew-resize",
+      }}
+    />
+  );
+
   return (
-    <div style={{
-      position: "absolute", top: 24, left: 24, zIndex: 4,
-      width: 460, padding: "14px 22px 14px",
-      background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 12,
-      boxShadow: "0 2px 12px rgba(26,24,20,0.06)", userSelect: "none",
-    }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{
-          fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-          fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: "#6B6359",
-        }}>Time range</div>
-        <div style={{
-          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-          fontSize: 16, fontWeight: 600, color: "#1A1814", letterSpacing: 0.2,
-        }}>{lo} — {hi}</div>
+    <div style={embedded
+      ? { userSelect: "none" }
+      : { ...overlay, top: 20, left: 20, width: 440, padding: "14px 20px 14px", userSelect: "none" }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={T.sectionLabel}>Time range</div>
+        <div style={{ fontFamily: F.mono, fontSize: 13, fontWeight: 700, color: C.navy, fontVariantNumeric: "tabular-nums" }}>
+          {lo} – {hi}
+        </div>
       </div>
 
-      <div ref={trackRef} style={{ position: "relative", height: 30 }}>
-        <div style={{ position: "absolute", top: 13, left: 0, right: 0, height: 1.5, background: "#D6CDBD", borderRadius: 1 }} />
+      {/* Embedded, the handles and end labels would overhang the rail's edge and be clipped. */}
+      <div ref={trackRef} style={{ position: "relative", height: 28, margin: embedded ? "0 14px" : 0 }}>
+        <div style={{ position: "absolute", top: 13, left: 0, right: 0, height: 2, background: C.hairMed }} />
         <div style={{
           position: "absolute", top: 12, left: `${pct(lo)}%`,
-          width: `${pct(hi) - pct(lo)}%`, height: 3, background: "#1F5963", borderRadius: 2,
+          width: `${pct(hi) - pct(lo)}%`, height: 4, background: C.navy,
         }} />
-
-        <div onMouseDown={(e) => { e.preventDefault(); setDragging("lo"); }} style={{
-          position: "absolute", top: 5, left: `${pct(lo)}%`, transform: "translateX(-50%)",
-          width: 16, height: 16, borderRadius: "50%", background: "#FFFFFF",
-          border: "2px solid #1F5963", boxShadow: "0 1px 4px rgba(26,24,20,0.18)", cursor: "ew-resize",
-        }} />
-        <div onMouseDown={(e) => { e.preventDefault(); setDragging("hi"); }} style={{
-          position: "absolute", top: 5, left: `${pct(hi)}%`, transform: "translateX(-50%)",
-          width: 16, height: 16, borderRadius: "50%", background: "#FFFFFF",
-          border: "2px solid #1F5963", boxShadow: "0 1px 4px rgba(26,24,20,0.18)", cursor: "ew-resize",
-        }} />
-
         {decades.map((d) => {
           const isLabel = labelDecades.includes(d);
           return (
             <div key={d} style={{
-              position: "absolute", left: `${pct(d)}%`, top: 21,
-              width: 1, height: isLabel ? 5 : 3, background: "#1A1814",
-              opacity: isLabel ? 0.55 : 0.3, transform: "translateX(-50%)", pointerEvents: "none",
+              position: "absolute", left: `${pct(d)}%`, top: 18,
+              width: 1, height: isLabel ? 6 : 3, background: isLabel ? C.secondary : C.hairMed,
+              transform: "translateX(-50%)", pointerEvents: "none",
             }} />
           );
         })}
+        {handle("lo", lo)}
+        {handle("hi", hi)}
       </div>
 
-      <div style={{ position: "relative", height: 14, marginTop: 2 }}>
+      <div style={{ position: "relative", height: 14, marginTop: 2, margin: embedded ? "2px 14px 0" : undefined }}>
         {labelDecades.map((d) => (
           <div key={d} style={{
             position: "absolute", left: `${pct(d)}%`, transform: "translateX(-50%)",
-            fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-            fontSize: 10.5, color: "#A39684", letterSpacing: 0.2, lineHeight: 1,
-          }}>’{String(d).slice(-2)}</div>
+            ...T.stamp, lineHeight: 1,
+          }}>{d}</div>
         ))}
       </div>
 
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "baseline",
-        marginTop: 10, fontSize: 12, color: "#3D3833",
+        marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.hairLight}`,
       }}>
-        <div>
-          <span style={{
-            fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-            fontWeight: 600, color: "#1A1814",
-          }}>{visibleCount}</span>
-          <span style={{ color: "#6B6359" }}> photographs visible</span>
+        <div style={{ fontFamily: F.serif, fontSize: 15, color: C.body }}>
+          <span style={{ fontWeight: 700, color: C.ink }}>{visibleCount}</span> {embedded ? "in view" : "photographs in range"}
         </div>
-        <div style={{
-          fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-          fontSize: 11, color: "#A39684", letterSpacing: 0.2,
-        }}>{totalCount} total in collection</div>
+        <div style={T.meta}>{totalCount} in the collection</div>
       </div>
     </div>
   );
@@ -398,133 +499,134 @@ function TimeRangeFilter({
 // ── Map controls ────────────────────────────────────────────────
 
 function MapControls({ onZoomIn, onZoomOut, onReset }: { onZoomIn: () => void; onZoomOut: () => void; onReset: () => void }) {
-  const btn = (children: React.ReactNode, onClick: () => void, last?: boolean) => (
-    <button onClick={onClick} style={{
-      width: 40, height: 40, background: "#FFFFFF", border: "none",
-      borderBottom: last ? "none" : "1px solid #EEE6D6",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      cursor: "pointer", color: "#1A1814",
-    }}>{children}</button>
-  );
+  const sep = { borderTop: `1px solid ${C.hairLight}` };
   return (
-    <div style={{
-      position: "absolute", bottom: 28, right: 24, zIndex: 4,
-      width: 40, borderRadius: 10, overflow: "hidden",
-      border: "1px solid #D6CDBD", boxShadow: "0 2px 12px rgba(26,24,20,0.06)",
-    }}>
-      {btn(<PlusIcon />, onZoomIn)}
-      {btn(<MinusIcon />, onZoomOut)}
-      {btn(<ResetIcon />, onReset, true)}
+    <div style={{ ...overlay, bottom: 24, right: 20, width: 36 }}>
+      <button className="dc-mapbtn" onClick={onZoomIn} aria-label="Zoom in"><PlusIcon /></button>
+      <button className="dc-mapbtn" onClick={onZoomOut} aria-label="Zoom out" style={sep}><MinusIcon /></button>
+      <button className="dc-mapbtn" onClick={onReset} aria-label="Reset the view" style={sep}><ResetIcon /></button>
     </div>
   );
 }
-function PlusIcon() { return <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="#1A1814" strokeWidth="1.6" strokeLinecap="round" /></svg>; }
-function MinusIcon() { return <svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 7h12" stroke="#1A1814" strokeWidth="1.6" strokeLinecap="round" /></svg>; }
-function ResetIcon() { return <svg width="14" height="14" viewBox="0 0 14 14"><path d="M2.5 7a4.5 4.5 0 1 1 1.3 3.2" stroke="#1A1814" strokeWidth="1.4" fill="none" strokeLinecap="round" /><path d="M2 4v3h3" stroke="#1A1814" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
+function PlusIcon() { return <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.6" /></svg>; }
+function MinusIcon() { return <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M1 7h12" stroke="currentColor" strokeWidth="1.6" /></svg>; }
+function ResetIcon() { return <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden><path d="M2.5 7a4.5 4.5 0 1 1 1.3 3.2" stroke="currentColor" strokeWidth="1.4" fill="none" /><path d="M2 4v3h3" stroke="currentColor" strokeWidth="1.4" fill="none" /></svg>; }
 
 // ── Story of the Week card ──────────────────────────────────────
 
 // The cover is the trail's Rockefeller stop — the one image whose subject and corner match exactly.
 const STORY_COVER = MILLIONAIRES_ROW.find((p) => p.id === "mr-5")?.thumb;
 
-function StoryOfTheWeek({ onOpen }: { onOpen: () => void }) {
+function StoryOfTheWeek({ onOpen, onDismiss }: { onOpen: () => void; onDismiss: () => void }) {
+  // The card is a button, and a button can't hold another — so the ✕ is a sibling laid over the
+  // cover's corner, on an ink square so it reads against any photograph.
   return (
-    <div onClick={onOpen} style={{
-      position: "absolute", bottom: 28, left: 24, zIndex: 4, width: 312,
-      background: "#FFFFFF", border: "1px solid #D6CDBD", borderRadius: 12,
-      overflow: "hidden", boxShadow: "0 2px 12px rgba(26,24,20,0.06)",
-      cursor: "pointer", transition: "transform 120ms, box-shadow 120ms",
-    }}
-      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 6px 24px rgba(26,24,20,0.14)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 2px 12px rgba(26,24,20,0.06)"; e.currentTarget.style.transform = "translateY(0)"; }}
+    <div style={{ position: "absolute", bottom: 24, left: 20, width: 300, zIndex: 4 }}>
+    <button
+      onClick={onOpen}
+      className="dc-story"
+      style={{
+        ...overlay, position: "relative", width: "100%", padding: 0, textAlign: "left",
+        cursor: "pointer", borderTop: `3px solid ${C.marigold}`,
+      }}
     >
       <div style={{
-        height: 132, position: "relative",
-        background: STORY_COVER
-          ? `center 40% / cover no-repeat url(${STORY_COVER}), #1A1814`
-          : "repeating-linear-gradient(135deg, #C8B68F 0 8px, #B8A37A 8px 16px)",
-      }}>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(26,24,20,0) 40%, rgba(26,24,20,0.55) 100%)" }} />
-        <div style={{
-          position: "absolute", top: 10, left: 12,
-          fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-          fontSize: 10, letterSpacing: 1, textTransform: "uppercase",
-          color: "#fff", opacity: 0.92, background: "rgba(26,24,20,0.55)",
-          padding: "4px 8px", borderRadius: 3,
-        }}>Story of the week</div>
-        <div style={{
-          position: "absolute", bottom: 8, right: 10,
-          fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-          fontSize: 10, color: "#fff", opacity: 0.85,
-        }}>{STORY_COVER ? "Rockefeller house · E. 40th" : "[ archival photo ]"}</div>
-      </div>
-      <div style={{ padding: "14px 16px 16px" }}>
-        <div style={{
-          fontFamily: "Spectral, 'Libre Caslon Text', Georgia, 'Times New Roman', serif",
-          fontWeight: 500, fontSize: 20, lineHeight: 1.15, letterSpacing: -0.2,
-          color: "#1A1814", marginBottom: 6,
-        }}>Millionaire&apos;s Row</div>
-        <div style={{ fontSize: 13.5, lineHeight: 1.45, color: "#3D3833", marginBottom: 12 }}>
+        height: 124, position: "relative", borderBottom: `1px solid ${C.hairLight}`,
+        background: STORY_COVER ? `center 40% / cover no-repeat url(${STORY_COVER}), ${C.sunken}` : HATCH,
+      }} />
+      <div style={{ padding: "12px 16px 14px" }}>
+        <span style={{ ...T.kicker, fontSize: 10.5, display: "inline-block", borderBottom: `3px solid ${C.marigold}`, paddingBottom: 3 }}>
+          Featured exhibit
+        </span>
+        <div className="dc-row__title" style={{ ...T.cardTitle, fontSize: 21, marginTop: 10 }}>Millionaire&apos;s Row</div>
+        <div style={{ ...T.snippet, fontSize: 14, lineHeight: 1.5, marginTop: 4 }}>
           The mansions Euclid Avenue lost — and the photographs that remember them.
         </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ color: "#1F5963", fontSize: 13, fontWeight: 500 }}>Read story →</span>
-          <span style={{ fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 11, color: "#A39684" }}>11 photos · 1900–1928</span>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginTop: 12 }}>
+          <span className="dc-link" style={{ whiteSpace: "nowrap" }}>Enter the exhibit →</span>
+          <span style={{ ...T.stamp, whiteSpace: "nowrap" }}>11 STOPS · 1900–1928</span>
         </div>
       </div>
+    </button>
+    <button
+      className="dc-close"
+      onClick={onDismiss}
+      aria-label="Close the featured exhibit"
+      title="Close"
+      style={{ position: "absolute", zIndex: 5, top: 3, right: 0, width: 28, height: 28, fontSize: 13, background: C.ink, color: C.onNavy, borderColor: C.ink }}
+    >✕</button>
     </div>
   );
 }
 
 // ── Density legend ──────────────────────────────────────────────
 
-function DensityLegend() {
+function DensityLegend({ left }: { left: number }) {
+  const dot = (bg: string, ring?: boolean): React.ReactNode => (
+    <span style={{
+      width: 8, height: 8, borderRadius: "50%", background: bg, display: "inline-block",
+      boxShadow: ring ? `0 0 0 1px ${C.ink}` : undefined,
+    }} />
+  );
   return (
     <div style={{
-      position: "absolute", bottom: 28, left: 360, zIndex: 4, padding: "10px 14px",
-      background: "rgba(255,255,255,0.86)", border: "1px solid #D6CDBD", borderRadius: 10,
-      fontFamily: '"JetBrains Mono", ui-monospace, monospace', fontSize: 11, color: "#6B6359",
+      ...overlay, bottom: 24, left, padding: "8px 12px", background: C.glass,
+      ...T.meta, color: C.secondary,
       // The legend sits at a fixed left offset, so each item added pushes its right edge toward
-      // the viewport. Wrap instead of clipping — the count chip made it 4 items wide.
-      display: "flex", alignItems: "center", gap: 10, letterSpacing: 0.4, textTransform: "uppercase",
-      flexWrap: "wrap", maxWidth: "calc(100vw - 380px)", rowGap: 6,
+      // the viewport. Wrap instead of clipping.
+      display: "flex", alignItems: "center", gap: 10,
+      flexWrap: "wrap", maxWidth: `calc(100vw - ${left + 80}px)`, rowGap: 6,
     } as React.CSSProperties}>
       {/* A dot is a *place*, not a photograph — corners photographed more than once carry a
           count (lib/patron-places.ts). Saying "1 dot = 1 photo" here would be a plain lie. */}
       <span>1 dot = 1 corner</span>
-      <span style={{ color: "#D6CDBD" }}>·</span>
+      <span style={{ color: C.hairMed }}>·</span>
       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{
-          minWidth: 14, height: 14, padding: "0 3px", borderRadius: 7, background: "#A8362B",
-          color: "#fff", fontSize: 9, lineHeight: "14px", textAlign: "center", display: "inline-block",
+          minWidth: 14, height: 14, padding: "0 3px", background: C.ink, color: C.onNavy,
+          fontSize: 9, fontWeight: 700, lineHeight: "14px", textAlign: "center", display: "inline-block",
+          boxSizing: "border-box",
         }}>3</span>
         photos here
       </span>
-      <span style={{ color: "#D6CDBD" }}>·</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#C8983A", display: "inline-block" }} />
-        featured
-      </span>
-      <span style={{ color: "#D6CDBD" }}>·</span>
-      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#A8362B", display: "inline-block" }} />
-        photo
-      </span>
+      <span style={{ color: C.hairMed }}>·</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{dot(C.marigold, true)} featured</span>
+      <span style={{ color: C.hairMed }}>·</span>
+      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{dot(C.navy)} photograph</span>
+      <span style={{ color: C.hairMed }}>·</span>
+      <span>Zoom all the way in to see the pictures</span>
     </div>
   );
 }
 
-function AttributionPill({ visibleCount, totalCount, yearRange }: { visibleCount: number; totalCount: number; yearRange: [number, number] }) {
+// ── Map ↔ gallery ───────────────────────────────────────────────
+// Sits where the "showing n of m" pill used to — top centre, over both views — and carries
+// that count itself: the Gallery option says how many pictures are waiting in the current view.
+
+function ViewToggle({ mode, onMode, inViewCount }: { mode: "map" | "gallery"; onMode: (m: "map" | "gallery") => void; inViewCount: number }) {
   return (
-    <div style={{
-      position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)", zIndex: 3,
-      padding: "7px 14px", background: "rgba(255,255,255,0.86)", border: "1px solid #D6CDBD",
-      borderRadius: 999, fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-      fontSize: 11, color: "#6B6359", letterSpacing: 0.4, textTransform: "uppercase", pointerEvents: "none",
+    <div className="dc-seg" role="group" aria-label="View" style={{
+      position: "absolute", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 7,
+      boxShadow: SHADOW.overlay,
     }}>
-      Showing {visibleCount} of {totalCount} photographs · {yearRange[0]}–{yearRange[1]}
+      <button aria-pressed={mode === "map"} onClick={() => onMode("map")} title="Map view (G)" style={{ gap: 8 }}>
+        <MapGlyph /> Map
+      </button>
+      <button aria-pressed={mode === "gallery"} onClick={() => onMode("gallery")} title="Gallery of what's in view (G)" style={{ gap: 8 }}>
+        <GridGlyph /> Gallery
+        <span style={{
+          fontFamily: F.mono, fontSize: 10, fontWeight: 700, padding: "1px 5px", marginLeft: 2,
+          background: mode === "gallery" ? "rgba(255,255,255,0.18)" : C.sunken,
+        }}>{inViewCount}</span>
+      </button>
     </div>
   );
+}
+function MapGlyph() {
+  return <svg width="13" height="12" viewBox="0 0 13 12" fill="none" aria-hidden><path d="M1 2.5 4.5 1l4 1.5L12 1v8.5L8.5 11l-4-1.5L1 11V2.5Z" stroke="currentColor" strokeWidth="1.2" /><path d="M4.5 1v8.5M8.5 2.5V11" stroke="currentColor" strokeWidth="1.2" /></svg>;
+}
+function GridGlyph() {
+  return <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><rect x="0.6" y="0.6" width="4.5" height="4.5" stroke="currentColor" strokeWidth="1.2" /><rect x="6.9" y="0.6" width="4.5" height="4.5" stroke="currentColor" strokeWidth="1.2" /><rect x="0.6" y="6.9" width="4.5" height="4.5" stroke="currentColor" strokeWidth="1.2" /><rect x="6.9" y="6.9" width="4.5" height="4.5" stroke="currentColor" strokeWidth="1.2" /></svg>;
 }
 
 // ── Onboarding whisper (dismissable) ────────────────────────────
@@ -532,22 +634,21 @@ function AttributionPill({ visibleCount, totalCount, yearRange }: { visibleCount
 function OnboardingWhisper({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div style={{
-      position: "absolute", bottom: 28, left: "50%", transform: "translateX(-50%)", zIndex: 4,
-      padding: "10px 14px", background: "rgba(26,24,20,0.88)", color: "#F6F2EB",
-      borderRadius: 10, fontSize: 13, display: "flex", alignItems: "center", gap: 12,
-      maxWidth: 480, boxShadow: "0 4px 18px rgba(26,24,20,0.22)",
+      // Above the bottom row of overlays (story card, legend, zoom), not among them.
+      position: "absolute", bottom: 76, left: "50%", transform: "translateX(-50%)", zIndex: 4,
+      padding: "8px 8px 8px 0", background: C.ink, color: C.onNavy,
+      display: "flex", alignItems: "center", gap: 12, maxWidth: 480, boxShadow: SHADOW.popover,
     }}>
       <span style={{
-        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
-        fontSize: 10, letterSpacing: 0.8, textTransform: "uppercase", color: "#C8983A",
+        alignSelf: "stretch", display: "flex", alignItems: "center", padding: "0 10px",
+        background: C.marigold, color: C.onMarigold,
+        fontFamily: F.mono, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase",
+        marginTop: -8, marginBottom: -8,
       }}>30 sec</span>
-      <span style={{ flex: 1, lineHeight: 1.35 }}>
-        Drag the time slider. Click a dot. Find your street.
+      <span style={{ flex: 1, fontFamily: F.serif, fontSize: 14.5, lineHeight: 1.35 }}>
+        Drag the time range. Click a dot. Press G for a gallery of what&rsquo;s in view.
       </span>
-      <button onClick={onDismiss} style={{
-        background: "none", border: "none", color: "#F6F2EB", opacity: 0.7,
-        fontSize: 18, lineHeight: 1, padding: 0, cursor: "pointer",
-      }}>×</button>
+      <button onClick={onDismiss} aria-label="Dismiss" className="dc-close" style={{ color: C.onNavy, width: 26, height: 26 }}>✕</button>
     </div>
   );
 }
