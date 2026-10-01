@@ -10,6 +10,9 @@
 All routes run on the Node runtime, `dynamic = "force-dynamic"`, and read/write Postgres via
 `lib/scan-store.ts`.
 
+> **Access:** every `/api/scan/*` and `/api/staff/*` route is **local-only by middleware** (404 to
+> any non-local request) in addition to any `403`-on-`VERCEL` noted per route. `/api/patron/*` is public.
+
 | Method · Path | Purpose | Returns |
 |---|---|---|
 | `GET /api/scan/records` | List all scan records | `ScanRecord[]` |
@@ -44,4 +47,4 @@ Scan-pipeline client calls go through `scanApi` (`lib/scan-api.ts`) and the unif
 - **`masters` / `ingest`** are the UI-driven ingest pair, backed by the shared core in `lib/scan-ingest.ts` (same `derive → store → VLM → upsert` as the `scan:run` CLI). Both are **local-only**: `sharp` derivation never runs in serverless, so they return `403` when `process.env.VERCEL` is set. `ingest` runs one master per call so the UI can show live per-photo progress.
 - `retry` requires the record to already have a `jpeg_url` (derivation is a local CLI step; serverless does not derive). `lib/storage.ts` fetches the bytes back — via HTTP for a Supabase URL, or off disk for a local `/derivatives/...` path.
 - **`prep`** is the crop & deskew stage *upstream* of ingest: it reads `scans/raw/<CHC>.tif` and, on `apply`, writes `scans/masters/<CHC>.tif` (the input to `masters`/`ingest`). Backed by `lib/prep-engine.ts`, which spawns `scan/crop_engine.py` (OpenCV). **Local-only** (403 on `VERCEL`), same as `masters`/`ingest`. Shapes are `RawEntry` / `PrepRecord` in `lib/types.ts`; client wrapper is `lib/prep-api.ts`.
-- Auth: none yet. When added, these routes get gated.
+- **Auth: none yet.** Until it lands, `middleware.ts` answers every `/api/scan/*` and `/api/staff/*` route (and `/staff`) with a plain **404** unless the request comes from this machine — so a dev server shared through a tunnel exposes only the patron surface and `/api/patron/*`. See `docs/architecture.md` § Backend. The `403`s above (`VERCEL`) are a separate, deploy-time guard.
